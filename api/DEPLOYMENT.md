@@ -1,6 +1,35 @@
 # API Deployment Guide
 
-## Quick Deploy to Render (Recommended)
+## Quick Deploy to Railway (Recommended) 🚀
+
+1. **Create a new project on Railway:**
+   - Go to https://railway.app
+   - Click "New Project" → "Deploy from GitHub repo"
+   - Select your repository
+   - Choose the `api` folder as the root directory
+
+2. **Configure the service:**
+   - Railway will auto-detect Python
+   - The `railway.json` and `Procfile` are already configured
+
+3. **Set Environment Variables:**
+   - Go to your project → Variables tab
+   - Add these variables:
+     - `DATABASE_URL`: Your Supabase PostgreSQL connection string
+     - `CORS_ORIGINS`: `http://localhost:3000,http://localhost:5173,https://web-i2xumnks2-nates-projects-b0f17eca.vercel.app`
+     - `APP_ENV`: `production`
+     - `TZ`: `America/New_York`
+
+4. **Deploy:**
+   - Railway will automatically deploy
+   - Copy the generated URL (e.g., `https://your-app-name.railway.app`)
+
+5. **Update Frontend:**
+   - In Vercel Dashboard → Environment Variables
+   - Set `VITE_API_URL` to your Railway URL
+   - Redeploy Vercel
+
+## Alternative: Deploy to Render
 
 1. **Create a new Web Service on Render:**
    - Go to https://render.com
