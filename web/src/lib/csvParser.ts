@@ -24,14 +24,12 @@ export function parseCSV(csvContent: string): CSVParsingResult {
     quoteChar: '"',
     // Escape character
     escapeChar: '"',
-    // Trim whitespace
-    trimHeaders: true,
     // Transform values to trim whitespace
     transform: (value: string) => value?.trim() || ''
   });
 
   return {
-    data: result.data,
+    data: result.data as string[][],
     errors: result.errors,
     meta: result.meta
   };
@@ -50,11 +48,10 @@ export function parseCSVFile(
       delimiter: '',
       quoteChar: '"',
       escapeChar: '"',
-      trimHeaders: true,
       transform: (value: string) => value?.trim() || '',
       complete: (result) => {
         resolve({
-          data: result.data,
+          data: result.data as string[][],
           errors: result.errors,
           meta: result.meta
         });
