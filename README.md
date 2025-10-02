@@ -152,4 +152,4 @@ Required environment variables:
 ├── .gitignore          # Git ignore rules
 ├── Makefile            # Development commands
 └── README.md           # This file
-```
+```# Trigger Vercel redeploy
