@@ -70,13 +70,21 @@ export function CreatorManagement() {
       const data = await api.seedCreators(file);
       setResult(data);
       toast.success(`Creator database synced! ${data.upserted} creators updated, ${data.skipped} skipped.`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Sync failed: ${errorMessage}`);
-      setResult({ upserted: 0, skipped: 0, total_processed: 0, errors: [errorMessage] });
-    } finally {
-      setLoading(false);
-    }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          
+          // Check if it's a CORS or network error
+          if (errorMessage.includes('CORS') || errorMessage.includes('Failed to fetch') || errorMessage.includes('ERR_FAILED')) {
+            toast.error('API not available. Please check if the backend is deployed and running.');
+            console.error('API Error - Check if backend is deployed:', errorMessage);
+          } else {
+            toast.error(`Sync failed: ${errorMessage}`);
+          }
+          
+          setResult({ upserted: 0, skipped: 0, total_processed: 0, errors: [errorMessage] });
+        } finally {
+          setLoading(false);
+        }
   };
 
   return (
@@ -97,8 +105,14 @@ export function CreatorManagement() {
               Upload a CSV export from your Notion creator database
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSync} className="space-y-4">
+            <CardContent>
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> This feature requires the API backend to be deployed. 
+                  If you see CORS errors, please deploy the API first using the instructions in <code>api/DEPLOYMENT.md</code>.
+                </p>
+              </div>
+              <form onSubmit={handleSync} className="space-y-4">
               <div>
                 <label htmlFor="file" className="block text-sm font-medium text-gray-700">
                   Notion CSV Export *

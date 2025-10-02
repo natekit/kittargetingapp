@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DATABASE_URL: str
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://kittargetingapp.vercel.app"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://web-i2xumnks2-nates-projects-b0f17eca.vercel.app"
     APP_ENV: str = "dev"
     TZ: str = "America/New_York"
     
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
             self.CORS_ORIGINS = [
                 "http://localhost:3000",
                 "http://localhost:5173", 
-                "https://kittargetingapp.vercel.app"
+                "https://web-i2xumnks2-nates-projects-b0f17eca.vercel.app"
             ]
 
 
