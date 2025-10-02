@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routers import core
+from app.routers import core, seed
 
 app = FastAPI(title="Kit Targeting App API", version="1.0.0")
 
@@ -16,6 +16,7 @@ app.add_middleware(
 
 # Mount routers
 app.include_router(core.router, prefix="/api", tags=["core"])
+app.include_router(seed.router, prefix="/api", tags=["seed"])
 
 
 @app.get("/")
