@@ -18,8 +18,6 @@ export function parseCSV(csvContent: string): CSVParsingResult {
   const result = Papa.parse<string[]>(csvContent, {
     // Skip empty lines
     skipEmptyLines: true,
-    // Handle different line endings
-    newline: '',
     // Detect delimiter automatically
     delimiter: '',
     // Proper quote handling
@@ -29,11 +27,7 @@ export function parseCSV(csvContent: string): CSVParsingResult {
     // Trim whitespace
     trimHeaders: true,
     // Transform values to trim whitespace
-    transform: (value: string) => value?.trim() || '',
-    // Error handling
-    error: (error: Papa.ParseError) => {
-      console.warn('CSV parsing error:', error);
-    }
+    transform: (value: string) => value?.trim() || ''
   });
 
   return {
@@ -53,7 +47,6 @@ export function parseCSVFile(
   return new Promise((resolve, reject) => {
     Papa.parse<string[]>(file, {
       skipEmptyLines: true,
-      newline: '',
       delimiter: '',
       quoteChar: '"',
       escapeChar: '"',
@@ -69,9 +62,9 @@ export function parseCSVFile(
       error: (error) => {
         reject(error);
       },
-      step: (result, parser) => {
+      step: (result) => {
         if (onProgress) {
-          // Use a simple progress calculation since getProgress might not be available
+          // Use a simple progress calculation
           const progress = Math.min(100, Math.max(0, (result.meta.cursor || 0) / (file.size || 1) * 100));
           onProgress(progress);
         }
