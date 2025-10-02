@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { Layout } from './components/Layout';
 import { AdminPage } from './pages/admin/AdminPage';
+import { CreatorManagement } from './pages/admin/CreatorManagement';
 import { PerformanceUpload } from './pages/uploads/PerformanceUpload';
 import { ConversionsUpload } from './pages/uploads/ConversionsUpload';
 import { LeaderboardPage } from './pages/dashboard/LeaderboardPage';
@@ -18,6 +19,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard/leaderboard" replace />} />
             <Route path="/admin" element={<AdminPage />} />
+            <Route path="/admin/creators" element={<CreatorManagement />} />
             <Route path="/uploads/performance" element={<PerformanceUpload />} />
             <Route path="/uploads/conversions" element={<ConversionsUpload />} />
             <Route path="/dashboard/leaderboard" element={<LeaderboardPage />} />

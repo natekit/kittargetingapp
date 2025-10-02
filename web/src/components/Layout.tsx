@@ -11,6 +11,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard/leaderboard' },
   { name: 'Planner', href: '/planner' },
   { name: 'Admin', href: '/admin' },
+  { name: 'Creators', href: '/admin/creators' },
   { name: 'Uploads', href: '/uploads/performance' },
 ];
 
