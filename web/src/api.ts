@@ -1,3 +1,14 @@
+import type { 
+  Advertiser, 
+  Campaign, 
+  Insertion, 
+  Creator, 
+  CreatorStats, 
+  PlanResponse,
+  PerformanceUploadResponse,
+  ConversionsUploadResponse
+} from './types';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class ApiClient {
@@ -31,21 +42,21 @@ class ApiClient {
   }
 
   // Advertisers
-  async getAdvertisers() {
-    return this.request('/api/advertisers');
+  async getAdvertisers(): Promise<Advertiser[]> {
+    return this.request<Advertiser[]>('/api/advertisers');
   }
 
-  async createAdvertiser(data: { name: string; category?: string }) {
-    return this.request('/api/advertisers', {
+  async createAdvertiser(data: { name: string; category?: string }): Promise<Advertiser> {
+    return this.request<Advertiser>('/api/advertisers', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   // Campaigns
-  async getCampaigns(advertiserId?: number) {
+  async getCampaigns(advertiserId?: number): Promise<Campaign[]> {
     const params = advertiserId ? `?advertiser_id=${advertiserId}` : '';
-    return this.request(`/api/campaigns${params}`);
+    return this.request<Campaign[]>(`/api/campaigns${params}`);
   }
 
   async createCampaign(data: {
@@ -54,17 +65,17 @@ class ApiClient {
     start_date: string;
     end_date: string;
     notes?: string;
-  }) {
-    return this.request('/api/campaigns', {
+  }): Promise<Campaign> {
+    return this.request<Campaign>('/api/campaigns', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   // Insertions
-  async getInsertions(campaignId?: number) {
+  async getInsertions(campaignId?: number): Promise<Insertion[]> {
     const params = campaignId ? `?campaign_id=${campaignId}` : '';
-    return this.request(`/api/insertions${params}`);
+    return this.request<Insertion[]>(`/api/insertions${params}`);
   }
 
   async createInsertion(data: {
@@ -72,16 +83,16 @@ class ApiClient {
     month_start: string;
     month_end: string;
     cpc: number;
-  }) {
-    return this.request('/api/insertions', {
+  }): Promise<Insertion> {
+    return this.request<Insertion>('/api/insertions', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   // Creators
-  async getCreators() {
-    return this.request('/api/creators');
+  async getCreators(): Promise<Creator[]> {
+    return this.request<Creator[]>('/api/creators');
   }
 
   // Seed creators
@@ -97,11 +108,11 @@ class ApiClient {
   }
 
   // Uploads
-  async uploadPerformance(insertionId: number, file: File) {
+  async uploadPerformance(insertionId: number, file: File): Promise<PerformanceUploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
     
-    return this.request(`/api/uploads/performance?insertion_id=${insertionId}`, {
+    return this.request<PerformanceUploadResponse>(`/api/uploads/performance?insertion_id=${insertionId}`, {
       method: 'POST',
       headers: {}, // Let browser set Content-Type for FormData
       body: formData,
@@ -115,7 +126,7 @@ class ApiClient {
     rangeStart: string,
     rangeEnd: string,
     file: File
-  ) {
+  ): Promise<ConversionsUploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
     
@@ -127,7 +138,7 @@ class ApiClient {
       range_end: rangeEnd,
     });
     
-    return this.request(`/api/uploads/conversions?${params}`, {
+    return this.request<ConversionsUploadResponse>(`/api/uploads/conversions?${params}`, {
       method: 'POST',
       headers: {}, // Let browser set Content-Type for FormData
       body: formData,
@@ -135,13 +146,13 @@ class ApiClient {
   }
 
   // Analytics
-  async getLeaderboard(category?: string, limit = 50, cpc?: number) {
+  async getLeaderboard(category?: string, limit = 50, cpc?: number): Promise<CreatorStats[]> {
     const params = new URLSearchParams();
     if (category) params.append('category', category);
     params.append('limit', limit.toString());
     if (cpc) params.append('cpc', cpc.toString());
     
-    return this.request(`/api/leaderboard?${params}`);
+    return this.request<CreatorStats[]>(`/api/leaderboard?${params}`);
   }
 
   async createPlan(data: {
@@ -152,8 +163,8 @@ class ApiClient {
     budget: number;
     target_cpa: number;
     horizon_days: number;
-  }) {
-    return this.request('/api/plan', {
+  }): Promise<PlanResponse> {
+    return this.request<PlanResponse>('/api/plan', {
       method: 'POST',
       body: JSON.stringify(data),
     });

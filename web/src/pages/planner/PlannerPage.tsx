@@ -4,41 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../api';
 import { downloadAsCsv } from '../../lib/csv';
-
-interface Advertiser {
-  advertiser_id: number;
-  name: string;
-  category?: string;
-}
-
-interface Insertion {
-  insertion_id: number;
-  campaign_id: number;
-  month_start: string;
-  month_end: string;
-  cpc: number;
-}
-
-interface PlanCreator {
-  creator_id: number;
-  name: string;
-  acct_id: string;
-  expected_cvr: number;
-  expected_cpa: number;
-  clicks_per_day: number;
-  expected_clicks: number;
-  expected_spend: number;
-  expected_conversions: number;
-  value_ratio: number;
-}
-
-interface PlanResponse {
-  picked_creators: PlanCreator[];
-  total_spend: number;
-  total_conversions: number;
-  blended_cpa: number;
-  budget_utilization: number;
-}
+import type { Advertiser, Insertion, PlanResponse } from '../../types';
 
 export function PlannerPage() {
   const [advertisers, setAdvertisers] = useState<Advertiser[]>([]);

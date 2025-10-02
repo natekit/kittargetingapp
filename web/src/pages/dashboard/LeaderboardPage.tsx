@@ -4,16 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../api';
 import { downloadAsCsv } from '../../lib/csv';
-
-interface CreatorStats {
-  creator_id: number;
-  name: string;
-  acct_id: string;
-  clicks: number;
-  conversions: number;
-  cvr: number;
-  expected_cpa?: number;
-}
+import type { CreatorStats } from '../../types';
 
 export function LeaderboardPage() {
   const [creators, setCreators] = useState<CreatorStats[]>([]);

@@ -3,12 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../api';
-
-interface Advertiser {
-  advertiser_id: number;
-  name: string;
-  category?: string;
-}
+import type { Advertiser } from '../../types';
 
 export function CampaignForm() {
   const [advertisers, setAdvertisers] = useState<Advertiser[]>([]);
