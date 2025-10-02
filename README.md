@@ -82,12 +82,66 @@ Required environment variables:
    - Ensure your API allows requests from your Vercel domain
    - The API is configured to use `CORS_ORIGINS` environment variable
 
+## 🚀 Quick Start Checklist
+
+### Database Setup (Supabase/PostgreSQL)
+- [ ] **1. Run database extensions**:
+  ```sql
+  CREATE EXTENSION IF NOT EXISTS citext;
+  CREATE EXTENSION IF NOT EXISTS btree_gist;
+  ```
+
+### Local Development
+- [ ] **2. API setup**:
+  ```bash
+  cd api && pip install -r requirements.txt && alembic upgrade head && uvicorn app.main:app --reload
+  ```
+  - API runs on `http://localhost:8000`
+  - Database migrations applied automatically
+
+- [ ] **3. Web setup**:
+  ```bash
+  cd web && npm i && npm run dev
+  ```
+  - Web app runs on `http://localhost:5173`
+
+### Data Setup & Workflow
+- [ ] **4. Seed creators**: Upload `CPC Creators.csv` to `/api/seed/creators`
+  - Creates 600+ creators from CSV
+  - Maps by `owner_email` and `acct_id`
+
+- [ ] **5. Create entities**: Use Admin page to create:
+  - **Advertiser** → **Campaign** → **Insertion** (with CPC)
+  - Cascading dropdowns for easy selection
+
+- [ ] **6. Upload Performance CSV** (Mon/Wed/Fri):
+  - Upload to `/api/uploads/performance`
+  - Matches creators via `owner_email` in Creator field
+  - Shows unmatched creators for review
+
+- [ ] **7. Upload Conversions CSV** (weekly):
+  - Upload to `/api/uploads/conversions` with date range
+  - **Override behavior**: Replaces overlapping date ranges
+  - Tracks replaced vs inserted rows
+
+- [ ] **8. Analytics & Planning**:
+  - Check **Leaderboard** for performance metrics
+  - Run **Planner** with budget and target CPA
+  - Export results as CSV for analysis
+
+### Production Deployment
+- [ ] **9. Deploy to production**:
+  - **API**: Deploy to Render (root directory: `api`)
+  - **Web**: Deploy to Vercel (root directory: `web`)
+  - Set environment variables in both platforms
+
 ## Project Structure
 
 ```
 ├── api/                 # FastAPI backend
 │   ├── app/            # Application code
 │   ├── alembic/        # Database migrations
+│   ├── tests/          # Pytest test suite
 │   ├── .env.example    # Environment variables template
 │   └── requirements.txt
 ├── web/                # React frontend
