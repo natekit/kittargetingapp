@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
+from sqlalchemy.dialects.postgresql import DATERANGE
 import csv
 import io
 import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime, date
 import pytz
-from app.models import Creator, PerfUpload, ClickUnique, Insertion
+from app.models import Creator, PerfUpload, ClickUnique, Insertion, ConvUpload, Conversion, Advertiser, Campaign
 from app.db import get_db
 
 router = APIRouter()
@@ -191,6 +192,134 @@ async def upload_performance_data(
             "inserted_rows": inserted_rows,
             "unmatched_count": unmatched_count,
             "unmatched_examples": unmatched_examples
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error processing CSV: {str(e)}")
+
+
+@router.post("/uploads/conversions")
+async def upload_conversions_data(
+    advertiser_id: int = Query(..., description="Advertiser ID"),
+    campaign_id: int = Query(..., description="Campaign ID"),
+    insertion_id: int = Query(..., description="Insertion ID"),
+    range_start: str = Query(..., description="Range start date (YYYY-MM-DD)"),
+    range_end: str = Query(..., description="Range end date (YYYY-MM-DD)"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Upload conversions CSV data for a specific insertion.
+    Expected columns: Acct Id, Conversions
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+    
+    # Parse date range
+    try:
+        start_date = datetime.strptime(range_start, '%Y-%m-%d').date()
+        end_date = datetime.strptime(range_end, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
+    # Verify entities exist
+    advertiser = db.query(Advertiser).filter(Advertiser.advertiser_id == advertiser_id).first()
+    if not advertiser:
+        raise HTTPException(status_code=404, detail="Advertiser not found")
+    
+    campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    insertion = db.query(Insertion).filter(Insertion.insertion_id == insertion_id).first()
+    if not insertion:
+        raise HTTPException(status_code=404, detail="Insertion not found")
+    
+    try:
+        # Read CSV content
+        content = await file.read()
+        csv_content = content.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(csv_content))
+        
+        replaced_rows = 0
+        inserted_rows = 0
+        
+        # Create conv_upload record
+        conv_upload = ConvUpload(
+            advertiser_id=advertiser_id,
+            campaign_id=campaign_id,
+            insertion_id=insertion_id,
+            uploaded_at=datetime.utcnow(),
+            filename=file.filename,
+            range_start=start_date,
+            range_end=end_date,
+            tz="America/New_York"
+        )
+        db.add(conv_upload)
+        db.flush()  # Get the ID without committing
+        
+        # Process each row in the CSV
+        for row in csv_reader:
+            try:
+                acct_id = row.get('Acct Id', '').strip()
+                conversions_str = row.get('Conversions', '').strip()
+                
+                # Skip rows with missing required fields
+                if not acct_id or not conversions_str:
+                    continue
+                
+                # Find creator by acct_id
+                creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+                if not creator:
+                    continue
+                
+                # Parse conversions count
+                try:
+                    conversions = int(conversions_str)
+                except ValueError:
+                    continue
+                
+                # Create daterange for the period
+                period_range = DATERANGE(start_date, end_date, '[]')
+                
+                # Delete existing conversions for this creator/insertion/period overlap
+                delete_query = text("""
+                    DELETE FROM conversions 
+                    WHERE creator_id = :creator_id 
+                    AND insertion_id = :insertion_id 
+                    AND period && :period_range
+                """)
+                
+                result = db.execute(delete_query, {
+                    'creator_id': creator.creator_id,
+                    'insertion_id': insertion_id,
+                    'period_range': period_range
+                })
+                replaced_rows += result.rowcount
+                
+                # Insert new conversion record
+                conversion = Conversion(
+                    conv_upload_id=conv_upload.conv_upload_id,
+                    insertion_id=insertion_id,
+                    creator_id=creator.creator_id,
+                    period=period_range,
+                    conversions=conversions
+                )
+                db.add(conversion)
+                inserted_rows += 1
+                
+            except Exception as e:
+                # Skip rows that cause errors
+                continue
+        
+        # Commit all changes
+        db.commit()
+        
+        return {
+            "conv_upload_id": conv_upload.conv_upload_id,
+            "replaced_rows": replaced_rows,
+            "inserted_rows": inserted_rows
         }
         
     except Exception as e:
