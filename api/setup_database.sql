@@ -111,15 +111,8 @@ CREATE TABLE conversions (
 
 CREATE INDEX ix_conversions_conversion_id ON conversions(conversion_id);
 
--- Create GiST exclusion constraint for conversions table
+-- Add GiST exclusion constraint for conversions table
 -- This prevents overlapping periods per (creator_id, insertion_id)
-CREATE TABLE conversions_exclusion_constraint AS
-SELECT 1 WHERE FALSE; -- This will be replaced by the actual constraint
-
--- Drop the dummy table and create the actual constraint
-DROP TABLE conversions_exclusion_constraint;
-
--- Add the exclusion constraint
 ALTER TABLE conversions 
 ADD CONSTRAINT conversions_creator_id_insertion_id_period_excl 
 EXCLUDE USING gist (

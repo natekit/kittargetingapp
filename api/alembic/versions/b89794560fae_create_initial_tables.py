@@ -20,6 +20,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+    # Enable required PostgreSQL extensions
+    op.execute('CREATE EXTENSION IF NOT EXISTS citext;')
+    op.execute('CREATE EXTENSION IF NOT EXISTS btree_gist;')
+    
     # Create advertisers table
     op.create_table('advertisers',
         sa.Column('advertiser_id', sa.Integer(), nullable=False),
@@ -165,3 +169,5 @@ def downgrade() -> None:
     op.drop_table('insertions')
     op.drop_table('campaigns')
     op.drop_table('advertisers')
+    
+    # Note: We don't drop extensions as they might be used by other tables
