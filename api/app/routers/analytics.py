@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, case, and_, or_
 from typing import Dict, Any, List, Optional
+import logging
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
 from app.models import Creator, ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion, ConvUpload
@@ -179,6 +180,15 @@ async def create_plan(
     if not plan_request.insertion_id and not plan_request.cpc:
         raise HTTPException(status_code=400, detail="Either insertion_id or cpc must be provided")
     
+    if plan_request.budget <= 0:
+        raise HTTPException(status_code=400, detail="Budget must be greater than 0")
+    
+    if plan_request.target_cpa <= 0:
+        raise HTTPException(status_code=400, detail="Target CPA must be greater than 0")
+    
+    if plan_request.horizon_days <= 0:
+        raise HTTPException(status_code=400, detail="Horizon days must be greater than 0")
+    
     # Get CPC from insertion if not provided
     cpc = plan_request.cpc
     if not cpc and plan_request.insertion_id:
@@ -201,6 +211,7 @@ async def create_plan(
         ).join(
             Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
         ).filter(Advertiser.category == plan_request.category)
+        logging.info(f"Planning for category: {plan_request.category}")
     elif plan_request.advertiser_id:
         creators_query = creators_query.join(
             ClickUnique, ClickUnique.creator_id == Creator.creator_id
@@ -211,8 +222,10 @@ async def create_plan(
         ).join(
             Campaign, Campaign.campaign_id == Insertion.campaign_id
         ).filter(Campaign.advertiser_id == plan_request.advertiser_id)
+        logging.info(f"Planning for advertiser_id: {plan_request.advertiser_id}")
     
     creators = creators_query.distinct().all()
+    logging.info(f"Found {len(creators)} creators for planning")
     
     if not creators:
         return PlanResponse(
@@ -281,8 +294,36 @@ async def create_plan(
         
         # Filter by target CPA
         if expected_cpa <= plan_request.target_cpa:
-            # Calculate historical days (simplified - using 30 days as default)
-            historical_days = 30
+            # Calculate actual historical days from data
+            historical_days_query = db.query(
+                func.max(ClickUnique.execution_date) - func.min(ClickUnique.execution_date)
+            ).filter(ClickUnique.creator_id == creator.creator_id)
+            
+            if plan_request.category:
+                historical_days_query = historical_days_query.join(
+                    PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+                ).join(
+                    Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+                ).join(
+                    Campaign, Campaign.campaign_id == Insertion.campaign_id
+                ).join(
+                    Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+                ).filter(Advertiser.category == plan_request.category)
+            elif plan_request.advertiser_id:
+                historical_days_query = historical_days_query.join(
+                    PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+                ).join(
+                    Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+                ).join(
+                    Campaign, Campaign.campaign_id == Insertion.campaign_id
+                ).filter(Campaign.advertiser_id == plan_request.advertiser_id)
+            
+            historical_days = historical_days_query.scalar()
+            if historical_days:
+                historical_days = max(1, historical_days.days)
+            else:
+                historical_days = 30  # Fallback to 30 days if no data
+            
             clicks_per_day = total_clicks / max(1, historical_days)
             expected_clicks = clicks_per_day * plan_request.horizon_days
             expected_spend = cpc * expected_clicks
