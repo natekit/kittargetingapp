@@ -6,7 +6,8 @@ import type {
   CreatorStats, 
   PlanResponse,
   PerformanceUploadResponse,
-  ConversionsUploadResponse
+  ConversionsUploadResponse,
+  SyncResult
 } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -96,11 +97,11 @@ class ApiClient {
   }
 
   // Seed creators
-  async seedCreators(file: File) {
+  async seedCreators(file: File): Promise<SyncResult> {
     const formData = new FormData();
     formData.append('file', file);
     
-    return this.request('/api/seed/creators', {
+    return this.request<SyncResult>('/api/seed/creators', {
       method: 'POST',
       headers: {}, // Let browser set Content-Type for FormData
       body: formData,
