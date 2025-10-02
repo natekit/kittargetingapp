@@ -15,7 +15,7 @@ export interface CSVParsingResult {
  * - Malformed rows
  */
 export function parseCSV(csvContent: string): CSVParsingResult {
-  const result = Papa.parse(csvContent, {
+  const result = Papa.parse<string[]>(csvContent, {
     // Skip empty lines
     skipEmptyLines: true,
     // Handle different line endings
@@ -37,7 +37,7 @@ export function parseCSV(csvContent: string): CSVParsingResult {
   });
 
   return {
-    data: result.data as string[][],
+    data: result.data,
     errors: result.errors,
     meta: result.meta
   };
@@ -51,7 +51,7 @@ export function parseCSVFile(
   onProgress?: (progress: number) => void
 ): Promise<CSVParsingResult> {
   return new Promise((resolve, reject) => {
-    Papa.parse(file, {
+    Papa.parse<string[]>(file, {
       skipEmptyLines: true,
       newline: '',
       delimiter: '',
@@ -61,7 +61,7 @@ export function parseCSVFile(
       transform: (value: string) => value?.trim() || '',
       complete: (result) => {
         resolve({
-          data: result.data as string[][],
+          data: result.data,
           errors: result.errors,
           meta: result.meta
         });
@@ -71,7 +71,8 @@ export function parseCSVFile(
       },
       step: (result, parser) => {
         if (onProgress) {
-          const progress = (parser.getProgress() * 100);
+          // Use a simple progress calculation since getProgress might not be available
+          const progress = Math.min(100, Math.max(0, (result.meta.cursor || 0) / (file.size || 1) * 100));
           onProgress(progress);
         }
       }
@@ -141,7 +142,7 @@ export function formatCSVErrors(errors: Papa.ParseError[]): string[] {
     } else if (error.type === 'Quotes') {
       return `Line ${error.row}: Mismatched quotes`;
     } else if (error.type === 'FieldMismatch') {
-      return `Line ${error.row}: Expected ${error.expected} fields, found ${error.actual}`;
+      return `Line ${error.row}: Field count mismatch - ${error.message}`;
     } else {
       return `Line ${error.row}: ${error.message}`;
     }

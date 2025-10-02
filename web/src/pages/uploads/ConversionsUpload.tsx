@@ -114,7 +114,7 @@ export function ConversionsUpload() {
         if (parseResult.errors.length > 0) {
           const formattedErrors = formatCSVErrors(parseResult.errors);
           setCsvErrors(formattedErrors);
-          toast.warning(`CSV parsing warnings: ${formattedErrors.length} issues found`);
+          toast.error(`CSV parsing warnings: ${formattedErrors.length} issues found`);
         }
         
         // Set preview
