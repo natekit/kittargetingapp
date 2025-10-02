@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.2",
+    "@types/papaparse": "^5.3.16",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",
+    "papaparse": "^5.5.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-hot-toast": "^2.6.0",

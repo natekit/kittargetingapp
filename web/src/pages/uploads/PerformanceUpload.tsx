@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../api';
+import { parseCSVFile, validateCSVStructure, getCSVPreview, formatCSVErrors } from '../../lib/csvParser';
 
 interface Advertiser {
   advertiser_id: number;
@@ -34,6 +35,7 @@ export function PerformanceUpload() {
   const [selectedInsertion, setSelectedInsertion] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<string[][]>([]);
+  const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [result, setResult] = useState<any>(null);
@@ -81,22 +83,45 @@ export function PerformanceUpload() {
     }
   }, [selectedCampaign]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
       setMessage('');
       setResult(null);
+      setCsvErrors([]);
       
-      // Preview CSV
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        const lines = text.split('\n').slice(0, 6); // First 5 rows + header
-        const preview = lines.map(line => line.split(',').map(cell => cell.trim()));
+      try {
+        // Parse CSV with proper handling
+        const parseResult = await parseCSVFile(selectedFile);
+        
+        // Validate structure for performance data
+        const validation = validateCSVStructure(parseResult.data, [
+          'Creator', 'Clicks', 'Unique', 'Flagged', 'Execution Date', 'Status'
+        ]);
+        
+        if (!validation.isValid) {
+          setCsvErrors(validation.errors);
+          toast.error('CSV validation failed. Please check the file format.');
+          return;
+        }
+        
+        // Format parsing errors if any
+        if (parseResult.errors.length > 0) {
+          const formattedErrors = formatCSVErrors(parseResult.errors);
+          setCsvErrors(formattedErrors);
+          toast.warning(`CSV parsing warnings: ${formattedErrors.length} issues found`);
+        }
+        
+        // Set preview
+        const preview = getCSVPreview(parseResult.data, 5);
         setCsvPreview(preview);
-      };
-      reader.readAsText(selectedFile);
+        
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to parse CSV';
+        setCsvErrors([errorMessage]);
+        toast.error(`CSV parsing failed: ${errorMessage}`);
+      }
     }
   };
 
@@ -247,9 +272,20 @@ export function PerformanceUpload() {
               </div>
             )}
 
-            <Button type="submit" disabled={loading || !file || !selectedInsertion}>
+            <Button type="submit" disabled={loading || !file || !selectedInsertion || csvErrors.length > 0}>
               {loading ? 'Uploading...' : 'Upload Performance Data'}
             </Button>
+            
+            {csvErrors.length > 0 && (
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-md p-4">
+                <h4 className="text-sm font-medium text-red-800 mb-2">CSV Issues:</h4>
+                <ul className="text-sm text-red-700 list-disc list-inside">
+                  {csvErrors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {message && (
               <div className={`text-sm ${message.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
