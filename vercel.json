@@ -3,5 +3,16 @@
   "outputDirectory": "web/dist",
   "devCommand": "cd web && npm run dev",
   "installCommand": "cd web && npm install",
-  "framework": "vite"
+  "framework": "vite",
+  "functions": {
+    "api.py": {
+      "runtime": "python3.9"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api.py"
+    }
+  ]
 }
