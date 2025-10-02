@@ -28,14 +28,7 @@ export function parseCSV(csvContent: string): CSVParsingResult {
     // Escape character
     escapeChar: '"',
     // Transform values to trim whitespace
-    transform: (value: string) => value?.trim() || '',
-    // Add more debugging
-    complete: (results) => {
-      console.log('Papa Parse complete:', results);
-    },
-    error: (error) => {
-      console.error('Papa Parse error:', error);
-    }
+    transform: (value: string) => value?.trim() || ''
   });
 
   console.log('Papa Parse result:', result);
@@ -108,13 +101,13 @@ export function parseCSVFile(
                     meta: semicolonResult.meta
                   });
                 },
-                error: (error) => {
+                error: (error: any) => {
                   console.error('Semicolon parse error:', error);
                   reject(error);
                 }
               });
             },
-            error: (error) => {
+            error: (error: any) => {
               console.error('Comma parse error:', error);
               reject(error);
             }
@@ -127,7 +120,7 @@ export function parseCSVFile(
           });
         }
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('File parse error:', error);
         reject(error);
       },
