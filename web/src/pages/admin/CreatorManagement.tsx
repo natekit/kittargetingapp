@@ -3,14 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../api';
+import { SyncResult } from '../../types';
 import toast from 'react-hot-toast';
-
-interface SyncResult {
-  upserted: number;
-  skipped: number;
-  total_processed: number;
-  errors?: string[];
-}
 
 export function CreatorManagement() {
   const [file, setFile] = useState<File | null>(null);

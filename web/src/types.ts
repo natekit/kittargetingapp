@@ -73,3 +73,10 @@ export interface ConversionsUploadResponse {
   replaced_rows: number;
   inserted_rows: number;
 }
+
+export interface SyncResult {
+  upserted: number;
+  skipped: number;
+  total_processed: number;
+  errors?: string[];
+}
