@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../api';
 import { SyncResult } from '../../types';
-import { parseCSVFile, validateCSVStructure, getCSVPreview, formatCSVErrors } from '../../lib/csvParser';
+import { parseCSVFile, validateCSVStructure, getCSVPreview, formatCSVErrors, debugCSVStructure } from '../../lib/csvParser';
 import toast from 'react-hot-toast';
 
 export function CreatorManagement() {
@@ -24,6 +24,10 @@ export function CreatorManagement() {
       try {
         // Parse CSV with proper handling
         const parseResult = await parseCSVFile(selectedFile);
+        
+        // Debug CSV structure first
+        const debugInfo = debugCSVStructure(parseResult.data);
+        console.log('CSV Debug Info:', debugInfo);
         
         // Validate structure
         const validation = validateCSVStructure(parseResult.data, [

@@ -76,7 +76,7 @@ export function parseCSVFile(
 export function validateCSVStructure(
   data: string[][], 
   requiredColumns: string[]
-): { isValid: boolean; errors: string[] } {
+): { isValid: boolean; errors: string[]; columnMapping?: { [key: string]: string } } {
   const errors: string[] = [];
   
   if (data.length === 0) {
@@ -90,14 +90,41 @@ export function validateCSVStructure(
     return { isValid: false, errors };
   }
   
-  // Check for required columns (case-insensitive)
-  const headerMap = new Map(headers.map(h => [h.toLowerCase(), h]));
-  const missingColumns = requiredColumns.filter(col => 
-    !headerMap.has(col.toLowerCase())
-  );
+  // Check for required columns (case-insensitive and flexible matching)
+  const headerMap = new Map(headers.map(h => [h.toLowerCase().trim(), h]));
+  
+  // Create flexible column mapping for common variations
+  const columnVariations: { [key: string]: string[] } = {
+    'name': ['name', 'creator name', 'creator_name', 'full name', 'full_name'],
+    'acct_id': ['acct_id', 'acct id', 'account_id', 'account id', 'id', 'creator_id', 'creator id'],
+    'owner_email': ['owner_email', 'owner email', 'email', 'creator_email', 'creator email', 'contact_email', 'contact email'],
+    'topic': ['topic', 'category', 'niche', 'subject', 'theme']
+  };
+  
+  const missingColumns: string[] = [];
+  const foundColumns: { [key: string]: string } = {};
+  
+  for (const requiredCol of requiredColumns) {
+    let found = false;
+    const variations = columnVariations[requiredCol] || [requiredCol];
+    
+    for (const variation of variations) {
+      if (headerMap.has(variation.toLowerCase())) {
+        foundColumns[requiredCol] = headerMap.get(variation.toLowerCase())!;
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      missingColumns.push(requiredCol);
+    }
+  }
   
   if (missingColumns.length > 0) {
     errors.push(`Missing required columns: ${missingColumns.join(', ')}`);
+    errors.push(`Found columns: ${headers.join(', ')}`);
+    errors.push(`Required columns: ${requiredColumns.join(', ')}`);
   }
   
   // Check for empty rows
@@ -111,7 +138,8 @@ export function validateCSVStructure(
   
   return {
     isValid: errors.length === 0,
-    errors
+    errors,
+    columnMapping: errors.length === 0 ? foundColumns : undefined
   };
 }
 
@@ -137,4 +165,29 @@ export function formatCSVErrors(errors: Papa.ParseError[]): string[] {
       return `Line ${error.row}: ${error.message}`;
     }
   });
+}
+
+/**
+ * Debug function to help troubleshoot CSV issues
+ */
+export function debugCSVStructure(data: string[][]): string[] {
+  const debug: string[] = [];
+  
+  if (data.length === 0) {
+    debug.push('CSV is completely empty');
+    return debug;
+  }
+  
+  debug.push(`CSV has ${data.length} rows`);
+  debug.push(`Headers: ${data[0]?.join(' | ') || 'None'}`);
+  debug.push(`First data row: ${data[1]?.join(' | ') || 'None'}`);
+  
+  if (data.length > 2) {
+    debug.push(`Sample of columns found:`);
+    data[0]?.forEach((header, index) => {
+      debug.push(`  Column ${index + 1}: "${header}" (length: ${header.length})`);
+    });
+  }
+  
+  return debug;
 }
