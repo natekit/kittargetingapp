@@ -13,4 +13,4 @@ pytest
 pytest-asyncio
 httpx
 python-multipart
-
+mangum
