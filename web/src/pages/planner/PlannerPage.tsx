@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../api';
-import { downloadAsCsv } from '../../lib/csv.js';
+import { downloadAsCsv } from '../../lib/csv';
 import type { Advertiser, Insertion, PlanResponse } from '../../types';
 
 export function PlannerPage() {
