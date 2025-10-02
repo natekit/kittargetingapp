@@ -1,16 +1,6 @@
-from fastapi import FastAPI
-from mangum import Mangum
-
-# Create FastAPI app
-app = FastAPI(title="Kit Targeting App API", version="1.0.0")
-
-@app.get("/")
-def read_root():
-    return {"message": "Kit Targeting App API"}
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "message": "API is running"}
-
-# Vercel handler
-handler = Mangum(app)
+def handler(request):
+    return {
+        'statusCode': 200,
+        'headers': {'Content-Type': 'application/json'},
+        'body': '{"status": "healthy", "message": "API is working!"}'
+    }
