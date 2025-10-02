@@ -6,14 +6,14 @@
   "framework": "vite",
   "builds": [
     {
-      "src": "api.py",
+      "src": "api/health.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api.py"
+      "src": "/api/health",
+      "dest": "/api/health.py"
     }
   ]
 }
