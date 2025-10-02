@@ -153,3 +153,4 @@ Required environment variables:
 ├── Makefile            # Development commands
 └── README.md           # This file
 ```# Trigger Vercel redeploy
+# Force deployment trigger
