@@ -8,4 +8,7 @@ psycopg[binary]
 python-dotenv
 pandas
 pytz
+pytest
+pytest-asyncio
+httpx
 
