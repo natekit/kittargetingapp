@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -121,8 +122,11 @@ export function ConversionsUpload() {
       );
       setResult(data);
       setMessage('Upload successful!');
+      toast.success(`Conversions data uploaded successfully! ${data.inserted_rows} rows inserted, ${data.replaced_rows} rows replaced.`);
     } catch (error) {
-      setMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setMessage(`Error: ${errorMessage}`);
+      toast.error(`Upload failed: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

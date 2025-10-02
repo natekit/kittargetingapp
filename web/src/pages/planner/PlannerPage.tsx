@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../api';
+import { downloadAsCsv } from '../../lib/csv';
 
 interface Advertiser {
   advertiser_id: number;
@@ -134,29 +135,20 @@ export function PlannerPage() {
       'Value Ratio'
     ];
     
-    const csvContent = [
-      headers.join(','),
-      ...plan.picked_creators.map(creator => [
-        creator.creator_id,
-        `"${creator.name}"`,
-        creator.acct_id,
-        creator.expected_cvr.toFixed(4),
-        creator.expected_cpa.toFixed(2),
-        creator.clicks_per_day.toFixed(2),
-        creator.expected_clicks.toFixed(0),
-        creator.expected_spend.toFixed(2),
-        creator.expected_conversions.toFixed(0),
-        creator.value_ratio.toFixed(6)
-      ].join(','))
-    ].join('\n');
+    const csvData = plan.picked_creators.map(creator => [
+      creator.creator_id,
+      creator.name,
+      creator.acct_id,
+      creator.expected_cvr.toFixed(4),
+      creator.expected_cpa.toFixed(2),
+      creator.clicks_per_day.toFixed(2),
+      creator.expected_clicks.toFixed(0),
+      creator.expected_spend.toFixed(2),
+      creator.expected_conversions.toFixed(0),
+      creator.value_ratio.toFixed(6)
+    ]);
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'plan.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadAsCsv('plan', csvData, headers);
   };
 
   return (

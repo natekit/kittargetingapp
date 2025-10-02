@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../api';
+import { downloadAsCsv } from '../../lib/csv';
 
 interface CreatorStats {
   creator_id: number;
@@ -50,26 +51,17 @@ export function LeaderboardPage() {
 
   const exportToCsv = () => {
     const headers = ['Creator ID', 'Name', 'Account ID', 'Clicks', 'Conversions', 'CVR', 'Expected CPA'];
-    const csvContent = [
-      headers.join(','),
-      ...creators.map(creator => [
-        creator.creator_id,
-        `"${creator.name}"`,
-        creator.acct_id,
-        creator.clicks,
-        creator.conversions,
-        creator.cvr.toFixed(4),
-        creator.expected_cpa?.toFixed(2) || ''
-      ].join(','))
-    ].join('\n');
+    const csvData = creators.map(creator => [
+      creator.creator_id,
+      creator.name,
+      creator.acct_id,
+      creator.clicks,
+      creator.conversions,
+      creator.cvr.toFixed(4),
+      creator.expected_cpa?.toFixed(2) || ''
+    ]);
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'leaderboard.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadAsCsv('leaderboard', csvData, headers);
   };
 
   return (
