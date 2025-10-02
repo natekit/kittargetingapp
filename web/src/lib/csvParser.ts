@@ -15,6 +15,9 @@ export interface CSVParsingResult {
  * - Malformed rows
  */
 export function parseCSV(csvContent: string): CSVParsingResult {
+  console.log('Raw CSV content length:', csvContent.length);
+  console.log('First 200 chars:', csvContent.substring(0, 200));
+  
   const result = Papa.parse<string[]>(csvContent, {
     // Skip empty lines
     skipEmptyLines: true,
@@ -25,8 +28,19 @@ export function parseCSV(csvContent: string): CSVParsingResult {
     // Escape character
     escapeChar: '"',
     // Transform values to trim whitespace
-    transform: (value: string) => value?.trim() || ''
+    transform: (value: string) => value?.trim() || '',
+    // Add more debugging
+    complete: (results) => {
+      console.log('Papa Parse complete:', results);
+    },
+    error: (error) => {
+      console.error('Papa Parse error:', error);
+    }
   });
+
+  console.log('Papa Parse result:', result);
+  console.log('Data length:', result.data?.length);
+  console.log('First few rows:', result.data?.slice(0, 3));
 
   return {
     data: result.data as string[][],
@@ -42,21 +56,79 @@ export function parseCSVFile(
   file: File, 
   onProgress?: (progress: number) => void
 ): Promise<CSVParsingResult> {
+  console.log('Parsing file:', file.name, 'Size:', file.size, 'Type:', file.type);
+  
   return new Promise((resolve, reject) => {
+    // First try with auto-detection
     Papa.parse<string[]>(file, {
       skipEmptyLines: true,
-      delimiter: '',
+      delimiter: '', // Auto-detect
       quoteChar: '"',
       escapeChar: '"',
       transform: (value: string) => value?.trim() || '',
       complete: (result) => {
-        resolve({
-          data: result.data as string[][],
-          errors: result.errors,
-          meta: result.meta
-        });
+        console.log('File parse complete (auto-detect):', result);
+        console.log('Data length:', result.data?.length);
+        console.log('First few rows:', result.data?.slice(0, 3));
+        
+        // If we got empty data, try with common delimiters
+        if (!result.data || result.data.length === 0 || (result.data.length === 1 && result.data[0].length === 1 && !result.data[0][0])) {
+          console.log('Auto-detect failed, trying common delimiters...');
+          
+          // Try comma first
+          Papa.parse<string[]>(file, {
+            skipEmptyLines: true,
+            delimiter: ',',
+            quoteChar: '"',
+            escapeChar: '"',
+            transform: (value: string) => value?.trim() || '',
+            complete: (commaResult) => {
+              console.log('Comma parse result:', commaResult);
+              if (commaResult.data && commaResult.data.length > 0) {
+                resolve({
+                  data: commaResult.data as string[][],
+                  errors: commaResult.errors,
+                  meta: commaResult.meta
+                });
+                return;
+              }
+              
+              // Try semicolon
+              Papa.parse<string[]>(file, {
+                skipEmptyLines: true,
+                delimiter: ';',
+                quoteChar: '"',
+                escapeChar: '"',
+                transform: (value: string) => value?.trim() || '',
+                complete: (semicolonResult) => {
+                  console.log('Semicolon parse result:', semicolonResult);
+                  resolve({
+                    data: semicolonResult.data as string[][],
+                    errors: semicolonResult.errors,
+                    meta: semicolonResult.meta
+                  });
+                },
+                error: (error) => {
+                  console.error('Semicolon parse error:', error);
+                  reject(error);
+                }
+              });
+            },
+            error: (error) => {
+              console.error('Comma parse error:', error);
+              reject(error);
+            }
+          });
+        } else {
+          resolve({
+            data: result.data as string[][],
+            errors: result.errors,
+            meta: result.meta
+          });
+        }
       },
       error: (error) => {
+        console.error('File parse error:', error);
         reject(error);
       },
       step: (result) => {
