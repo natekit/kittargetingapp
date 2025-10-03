@@ -3,17 +3,5 @@
   "outputDirectory": "web/dist",
   "devCommand": "cd web && npm run dev",
   "installCommand": "cd web && npm install",
-  "framework": "vite",
-  "builds": [
-    {
-      "src": "api/health.py",
-      "use": "@vercel/python"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/health",
-      "dest": "/api/health.py"
-    }
-  ]
+  "framework": "vite"
 }
