@@ -279,6 +279,11 @@ async def upload_conversions_data(
                     logging.info(f"DEBUG: Skipping row - missing fields. acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
                     continue
                 
+                # Skip header rows (where acct_id is the column name)
+                if acct_id == 'Acct Id':
+                    logging.info(f"DEBUG: Skipping header row")
+                    continue
+                
                 # Find creator by acct_id (keep as string since database stores it as string)
                 creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
                 if not creator:
