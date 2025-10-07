@@ -142,6 +142,7 @@ export function ConversionsUploadForm() {
     setMessage('');
 
     try {
+      console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type);
       const data = await api.uploadConversions(
         selectedAdvertiser,
         selectedCampaign,
@@ -150,6 +151,7 @@ export function ConversionsUploadForm() {
         dateRange.end,
         file
       );
+      console.log('Upload response:', data);
       setResult(data);
       setMessage('Upload successful!');
       toast.success(`Conversions data uploaded successfully! ${data.inserted_rows} rows inserted, ${data.replaced_rows} rows replaced.`);
@@ -338,6 +340,16 @@ export function ConversionsUploadForm() {
                 <p>Conversions Upload ID: {result.conv_upload_id}</p>
                 <p>Replaced Rows: {result.replaced_rows}</p>
                 <p>Inserted Rows: {result.inserted_rows}</p>
+                {result.debug_info && (
+                  <div className="mt-2 p-2 bg-blue-50 rounded border">
+                    <h5 className="font-medium text-blue-800">Debug Info:</h5>
+                    <p>CSV Content Length: {result.debug_info.csv_content_length}</p>
+                    <p>CSV Fieldnames: {JSON.stringify(result.debug_info.csv_fieldnames)}</p>
+                    <p>Total CSV Rows: {result.debug_info.total_csv_rows}</p>
+                    <p>Processed Rows: {result.debug_info.processed_rows}</p>
+                    <p>CSV Preview: {result.debug_info.csv_preview}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
