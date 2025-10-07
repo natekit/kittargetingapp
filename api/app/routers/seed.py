@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import csv
 import io
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
 from app.models import Creator
 from app.db import get_db
 from datetime import datetime
@@ -28,65 +28,85 @@ async def seed_creators(
         content = await file.read()
         csv_content = content.decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(csv_content))
-        
+
         upserted = 0
         skipped = 0
-        
+
+        # Collect normalized rows first
+        all_rows: List[Tuple[str, str, str, str]] = []
         for row in csv_reader:
             try:
-                # Extract data from CSV row
-                owner_email = row.get('owner_email', '').strip().lower()
-                acct_id = row.get('acct_id', '').strip()
-                name = row.get('name', '').strip()
-                topic = row.get('topic', '').strip()
-                
-                # Skip rows with missing required fields
+                owner_email = (row.get('owner_email') or '').strip().lower()
+                acct_id = (row.get('acct_id') or '').strip()
+                name = (row.get('name') or '').strip()
+                topic = (row.get('topic') or '').strip()
                 if not owner_email or not acct_id:
                     skipped += 1
                     continue
-                
-                # Check if creator exists by owner_email (case-insensitive) or acct_id
-                existing_creator = db.query(Creator).filter(
-                    (func.lower(Creator.owner_email) == owner_email) | 
-                    (Creator.acct_id == acct_id)
-                ).first()
-                
-                current_time = datetime.utcnow()
-                
-                if existing_creator:
-                    # Update existing creator
-                    existing_creator.name = name or existing_creator.name
-                    existing_creator.topic = topic or existing_creator.topic
-                    existing_creator.updated_at = current_time
-                    # Update acct_id if it's different (in case we found by email)
-                    if existing_creator.acct_id != acct_id:
-                        existing_creator.acct_id = acct_id
-                    upserted += 1
-                else:
-                    # Create new creator
-                    new_creator = Creator(
-                        name=name,
-                        acct_id=acct_id,
-                        owner_email=owner_email,
-                        topic=topic,
-                        created_at=current_time,
-                        updated_at=current_time
-                    )
-                    db.add(new_creator)
-                    upserted += 1
-                    
-            except Exception as e:
-                # Skip rows that cause errors
+                all_rows.append((owner_email, acct_id, name, topic))
+            except Exception:
                 skipped += 1
                 continue
-        
-        # Commit all changes
-        db.commit()
-        
-        return {
-            "upserted": upserted,
-            "skipped": skipped
-        }
+
+        # Process in batches to reduce DB round-trips and avoid timeouts
+        BATCH_SIZE = 200
+        for i in range(0, len(all_rows), BATCH_SIZE):
+            batch = all_rows[i:i + BATCH_SIZE]
+            try:
+                emails = [r[0] for r in batch]
+                acct_ids = [r[1] for r in batch]
+
+                # Fetch existing creators matching by email (case-insensitive) or acct_id
+                existing = (
+                    db.query(Creator)
+                    .filter(
+                        (func.lower(Creator.owner_email).in_(emails)) |
+                        (Creator.acct_id.in_(acct_ids))
+                    )
+                    .all()
+                )
+
+                # Build lookup maps
+                by_email = {c.owner_email.lower(): c for c in existing}
+                by_acct = {c.acct_id: c for c in existing}
+
+                current_time = datetime.utcnow()
+
+                for owner_email, acct_id, name, topic in batch:
+                    try:
+                        existing_creator = by_email.get(owner_email) or by_acct.get(acct_id)
+                        if existing_creator:
+                            if name:
+                                existing_creator.name = name
+                            if topic:
+                                existing_creator.topic = topic
+                            if existing_creator.acct_id != acct_id:
+                                existing_creator.acct_id = acct_id
+                            existing_creator.updated_at = current_time
+                            upserted += 1
+                        else:
+                            new_creator = Creator(
+                                name=name or '',
+                                acct_id=acct_id,
+                                owner_email=owner_email,
+                                topic=topic or None,
+                                created_at=current_time,
+                                updated_at=current_time
+                            )
+                            db.add(new_creator)
+                            upserted += 1
+                    except Exception:
+                        skipped += 1
+                        continue
+
+                db.commit()
+            except Exception:
+                db.rollback()
+                # Conservatively mark this whole batch as skipped if a batch-level error occurs
+                skipped += len(batch)
+                continue
+
+        return {"upserted": upserted, "skipped": skipped}
         
     except Exception as e:
         db.rollback()

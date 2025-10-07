@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     DATABASE_URL: str
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://web-i2xumnks2-nates-projects-b0f17eca.vercel.app"
+    CORS_ORIGIN_REGEX: str | None = None
     APP_ENV: str = "dev"
     TZ: str = "America/New_York"
     

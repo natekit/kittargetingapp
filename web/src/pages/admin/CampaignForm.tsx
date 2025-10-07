@@ -58,14 +58,6 @@ export function CampaignForm() {
     // Date validation
     if (!formData.start_date) {
       newErrors.start_date = 'Start date is required';
-    } else {
-      const startDate = new Date(formData.start_date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      if (startDate < today) {
-        newErrors.start_date = 'Start date cannot be in the past';
-      }
     }
     
     if (!formData.end_date) {

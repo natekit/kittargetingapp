@@ -43,7 +43,7 @@
    - **Python Version:** 3.11
 
 3. **Set Environment Variables:**
-   - `DATABASE_URL`: Your PostgreSQL connection string
+   - `DATABASE_URL`: postgresql://postgres:YBV9qrb9dzy*ukz.agu@db.syuxyeewvhufwwulzwmx.supabase.co:5432/postgres
    - `CORS_ORIGINS`: `http://localhost:3000,http://localhost:5173,https://web-i2xumnks2-nates-projects-b0f17eca.vercel.app`
    - `APP_ENV`: `production`
    - `TZ`: `America/New_York`
