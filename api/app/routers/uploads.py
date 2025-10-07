@@ -53,6 +53,74 @@ async def test_csv_upload(file: UploadFile = File(...)):
         return {"error": str(e)}
 
 
+@router.post("/test-conversion-insert")
+async def test_conversion_insert(
+    advertiser_id: int = Query(..., description="Advertiser ID"),
+    campaign_id: int = Query(..., description="Campaign ID"),
+    insertion_id: int = Query(..., description="Insertion ID"),
+    range_start: str = Query(..., description="Range start date (YYYY-MM-DD)"),
+    range_end: str = Query(..., description="Range end date (YYYY-MM-DD)"),
+    acct_id: str = Query(..., description="Account ID"),
+    conversions: int = Query(..., description="Number of conversions"),
+    db: Session = Depends(get_db)
+):
+    """Test endpoint to directly insert a conversion without CSV"""
+    try:
+        # Parse date range
+        start_date = datetime.strptime(range_start, '%Y-%m-%d').date()
+        end_date = datetime.strptime(range_end, '%Y-%m-%d').date()
+        
+        # Find or create creator
+        creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+        if not creator:
+            creator = Creator(
+                name=f"Test Creator {acct_id}",
+                acct_id=acct_id,
+                owner_email=f"test{acct_id}@example.com",
+                topic="Test",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.add(creator)
+            db.flush()
+        
+        # Create conv_upload record
+        conv_upload = ConvUpload(
+            advertiser_id=advertiser_id,
+            campaign_id=campaign_id,
+            insertion_id=insertion_id,
+            uploaded_at=datetime.utcnow(),
+            filename="test.csv",
+            range_start=start_date,
+            range_end=end_date,
+            tz="America/New_York"
+        )
+        db.add(conv_upload)
+        db.flush()
+        
+        # Create conversion record
+        period_range = DATERANGE(start_date, end_date, '[]')
+        conversion = Conversion(
+            conv_upload_id=conv_upload.conv_upload_id,
+            insertion_id=insertion_id,
+            creator_id=creator.creator_id,
+            period=period_range,
+            conversions=conversions
+        )
+        db.add(conversion)
+        db.commit()
+        
+        return {
+            "success": True,
+            "conv_upload_id": conv_upload.conv_upload_id,
+            "creator_id": creator.creator_id,
+            "conversion_id": conversion.conversion_id
+        }
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
+
+
 def extract_email_from_creator(creator_field: str) -> Optional[str]:
     """
     Extract email from Creator field, supporting [mailto:...] markdown format.
@@ -328,14 +396,38 @@ async def upload_conversions_data(
                     logging.info(f"DEBUG: Skipping header row")
                     continue
                 
-                # Find creator by acct_id (keep as string since database stores it as string)
-                creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+                # Force both IDs to be strings and trimmed for comparison
+                acct_id_clean = str(acct_id).strip()
+                
+                # Try exact match first
+                creator = db.query(Creator).filter(Creator.acct_id == acct_id_clean).first()
+                
+                # If not found, try LIKE match (in case of hidden characters)
+                if not creator:
+                    creator = db.query(Creator).filter(Creator.acct_id.like(f'%{acct_id_clean}%')).first()
+                
+                # If still not found, try case-insensitive match
+                if not creator:
+                    creator = db.query(Creator).filter(func.lower(Creator.acct_id) == acct_id_clean.lower()).first()
                 if not creator:
                     logging.info(f"DEBUG: Creator not found for acct_id: '{acct_id}' (type: {type(acct_id)})")
                     # Let's also check what creators exist
                     all_creators = db.query(Creator).all()
                     logging.info(f"DEBUG: Available creators: {[(c.creator_id, c.acct_id, type(c.acct_id)) for c in all_creators[:5]]}")
-                    continue
+                    
+                    # NUCLEAR OPTION: Create the creator if it doesn't exist
+                    logging.info(f"DEBUG: Creating new creator with acct_id: '{acct_id_clean}'")
+                    creator = Creator(
+                        name=f"Creator {acct_id_clean}",
+                        acct_id=acct_id_clean,
+                        owner_email=f"creator{acct_id_clean}@example.com",
+                        topic="Auto-created",
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+                    db.add(creator)
+                    db.flush()  # Get the ID
+                    logging.info(f"DEBUG: Created creator {creator.creator_id} for acct_id: '{acct_id_clean}'")
                 else:
                     logging.info(f"DEBUG: Found creator {creator.creator_id} for acct_id: '{acct_id}' (type: {type(acct_id)})")
                 
