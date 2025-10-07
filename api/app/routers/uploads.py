@@ -248,6 +248,7 @@ async def upload_conversions_data(
         
         replaced_rows = 0
         inserted_rows = 0
+        total_csv_rows = 0
         
         # Create conv_upload record
         conv_upload = ConvUpload(
@@ -265,6 +266,7 @@ async def upload_conversions_data(
         
         # Process each row in the CSV
         for row in csv_reader:
+            total_csv_rows += 1
             try:
                 acct_id = row.get('Acct Id', '').strip()
                 conversions_str = row.get('Conversions', '').strip()
@@ -332,7 +334,14 @@ async def upload_conversions_data(
         return {
             "conv_upload_id": conv_upload.conv_upload_id,
             "replaced_rows": replaced_rows,
-            "inserted_rows": inserted_rows
+            "inserted_rows": inserted_rows,
+            "debug_info": {
+                "csv_content_length": len(csv_content),
+                "csv_fieldnames": csv_reader.fieldnames,
+                "total_csv_rows": total_csv_rows,
+                "processed_rows": replaced_rows + inserted_rows,
+                "csv_preview": csv_content[:200] if csv_content else "No content"
+            }
         }
         
     except Exception as e:
