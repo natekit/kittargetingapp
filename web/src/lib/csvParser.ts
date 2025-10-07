@@ -87,6 +87,9 @@ export function parseCSVFile(
             transform: (value: string) => value?.trim() || '',
             complete: (commaResult) => {
               console.log('Comma parse result:', commaResult);
+              console.log('Comma parse data length:', commaResult.data?.length);
+              console.log('Comma parse first few rows:', commaResult.data?.slice(0, 3));
+              console.log('Comma parse errors:', commaResult.errors);
               if (commaResult.data && commaResult.data.length > 0) {
                 resolve({
                   data: commaResult.data as string[][],
