@@ -92,8 +92,8 @@ export function ManualConversionForm() {
     setResult(null);
 
     try {
-      // Use the test endpoint to directly insert conversion
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/test-conversion-insert?advertiser_id=${selectedAdvertiser}&campaign_id=${selectedCampaign}&insertion_id=${selectedInsertion}&range_start=${dateRange.start}&range_end=${dateRange.end}&acct_id=${acctId}&conversions=${conversions}`);
+      // Use the simple endpoint to directly insert conversion
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/simple-conversion?advertiser_id=${selectedAdvertiser}&campaign_id=${selectedCampaign}&insertion_id=${selectedInsertion}&range_start=${dateRange.start}&range_end=${dateRange.end}&acct_id=${acctId}&conversions=${conversions}`);
       const data = await response.json();
       
       if (data.error) {

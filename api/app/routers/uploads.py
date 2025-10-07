@@ -53,8 +53,8 @@ async def test_csv_upload(file: UploadFile = File(...)):
         return {"error": str(e)}
 
 
-@router.post("/test-conversion-insert")
-async def test_conversion_insert(
+@router.post("/simple-conversion")
+async def simple_conversion(
     advertiser_id: int = Query(..., description="Advertiser ID"),
     campaign_id: int = Query(..., description="Campaign ID"),
     insertion_id: int = Query(..., description="Insertion ID"),
@@ -64,9 +64,9 @@ async def test_conversion_insert(
     conversions: int = Query(..., description="Number of conversions"),
     db: Session = Depends(get_db)
 ):
-    """Test endpoint to directly insert a conversion without CSV"""
+    """Simple endpoint to insert conversion data"""
     try:
-        # Parse date range
+        # Parse dates
         start_date = datetime.strptime(range_start, '%Y-%m-%d').date()
         end_date = datetime.strptime(range_end, '%Y-%m-%d').date()
         
@@ -74,23 +74,23 @@ async def test_conversion_insert(
         creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
         if not creator:
             creator = Creator(
-                name=f"Test Creator {acct_id}",
+                name=f"Creator {acct_id}",
                 acct_id=acct_id,
-                owner_email=f"test{acct_id}@example.com",
-                topic="Test",
+                owner_email=f"creator{acct_id}@example.com",
+                topic="Auto-created",
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
             db.add(creator)
             db.flush()
         
-        # Create conv_upload record
+        # Create upload record
         conv_upload = ConvUpload(
             advertiser_id=advertiser_id,
             campaign_id=campaign_id,
             insertion_id=insertion_id,
             uploaded_at=datetime.utcnow(),
-            filename="test.csv",
+            filename="manual.csv",
             range_start=start_date,
             range_end=end_date,
             tz="America/New_York"
@@ -98,7 +98,7 @@ async def test_conversion_insert(
         db.add(conv_upload)
         db.flush()
         
-        # Create conversion record
+        # Create conversion
         period_range = DATERANGE(start_date, end_date, '[]')
         conversion = Conversion(
             conv_upload_id=conv_upload.conv_upload_id,
