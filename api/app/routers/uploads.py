@@ -377,14 +377,18 @@ async def upload_conversions_data(
         db.flush()  # Get the ID without committing
         
         # Process each row in the CSV
+        logging.info(f"DEBUG: Starting CSV processing with {len(csv_rows)} rows")
         for row in csv_rows:
             total_csv_rows += 1
-            logging.info(f"DEBUG: Row {total_csv_rows}: {row}")
+            logging.info(f"DEBUG: Processing row {total_csv_rows}: {row}")
             try:
+                # Map CSV column names to database field names
                 acct_id = row.get('Acct Id', '').strip()
                 conversions_str = row.get('Conversions', '').strip()
                 
                 logging.info(f"DEBUG: Processing row - acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
+                logging.info(f"DEBUG: CSV row keys: {list(row.keys())}")
+                logging.info(f"DEBUG: CSV row values: {list(row.values())}")
                 
                 # Skip rows with missing required fields
                 if not acct_id or not conversions_str:
