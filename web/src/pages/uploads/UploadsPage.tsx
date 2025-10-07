@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
-import { PerformanceUpload } from './PerformanceUpload';
-import { ConversionsUpload } from './ConversionsUpload';
+import { PerformanceUploadForm } from './PerformanceUploadForm';
+import { ConversionsUploadForm } from './ConversionsUploadForm';
 
 type UploadType = 'performance' | 'conversions';
 
@@ -59,7 +59,9 @@ export function UploadsPage() {
                     Upload CSV files with click and performance metrics. Expected columns: Creator, Clicks, Unique, Flagged, Execution Date, Status
                   </p>
                 </div>
-                <PerformanceUpload />
+                <div className="border-t pt-6">
+                  <PerformanceUploadForm />
+                </div>
               </div>
             )}
 
@@ -71,7 +73,9 @@ export function UploadsPage() {
                     Upload CSV files with conversion tracking data. Expected columns: Acct Id, Conversions
                   </p>
                 </div>
-                <ConversionsUpload />
+                <div className="border-t pt-6">
+                  <ConversionsUploadForm />
+                </div>
               </div>
             )}
           </div>
