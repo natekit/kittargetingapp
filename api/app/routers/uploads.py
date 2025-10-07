@@ -267,6 +267,7 @@ async def upload_conversions_data(
         # Process each row in the CSV
         for row in csv_reader:
             total_csv_rows += 1
+            logging.info(f"DEBUG: Row {total_csv_rows}: {row}")
             try:
                 acct_id = row.get('Acct Id', '').strip()
                 conversions_str = row.get('Conversions', '').strip()
