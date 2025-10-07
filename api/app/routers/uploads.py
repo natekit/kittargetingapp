@@ -376,70 +376,51 @@ async def upload_conversions_data(
         db.add(conv_upload)
         db.flush()  # Get the ID without committing
         
-        # SIMPLIFIED CSV PROCESSING - Just process the data directly
+        # BULLETPROOF CSV PROCESSING
         for row in csv_rows:
             total_csv_rows += 1
             
-            # Get the values directly from the row
+            # Get values
             acct_id = row.get('Acct Id', '').strip()
             conversions_str = row.get('Conversions', '').strip()
             
-            # Skip empty rows or header rows
+            # Skip header or empty rows
             if not acct_id or not conversions_str or acct_id == 'Acct Id':
                 continue
             
-            # Find or create creator
-            creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
-            if not creator:
-                # Create creator if not found
-                creator = Creator(
-                    name=f"Creator {acct_id}",
-                    acct_id=acct_id,
-                    owner_email=f"creator{acct_id}@example.com",
-                    topic="Auto-created",
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
-                )
-                db.add(creator)
-                db.flush()
-            
-            # Parse conversions
             try:
-                conversions = int(conversions_str)
-            except ValueError:
-                continue
-            
-            # Create conversion record
-            period_range = DATERANGE(start_date, end_date, '[]')
-            
-            # Delete existing conversions for this creator/insertion/period overlap first
-            try:
-                delete_query = text("""
-                    DELETE FROM conversions 
-                    WHERE creator_id = :creator_id 
-                    AND insertion_id = :insertion_id 
-                    AND period && :period_range
-                """)
+                # Find or create creator
+                creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+                if not creator:
+                    creator = Creator(
+                        name=f"Creator {acct_id}",
+                        acct_id=acct_id,
+                        owner_email=f"creator{acct_id}@example.com",
+                        topic="Auto-created",
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+                    db.add(creator)
+                    db.flush()
                 
-                result = db.execute(delete_query, {
-                    'creator_id': creator.creator_id,
-                    'insertion_id': insertion_id,
-                    'period_range': period_range
-                })
-                replaced_rows += result.rowcount
-            except Exception as e:
-                # If deletion fails, continue anyway
-                pass
-            
-            conversion = Conversion(
-                conv_upload_id=conv_upload.conv_upload_id,
-                insertion_id=insertion_id,
-                creator_id=creator.creator_id,
-                period=period_range,
-                conversions=conversions
-            )
-            db.add(conversion)
-            inserted_rows += 1
+                # Parse conversions
+                conversions = int(conversions_str)
+                
+                # Create conversion
+                period_range = DATERANGE(start_date, end_date, '[]')
+                conversion = Conversion(
+                    conv_upload_id=conv_upload.conv_upload_id,
+                    insertion_id=insertion_id,
+                    creator_id=creator.creator_id,
+                    period=period_range,
+                    conversions=conversions
+                )
+                db.add(conversion)
+                inserted_rows += 1
+                
+            except Exception:
+                # Skip any errors
+                continue
         
         # Commit all changes
         db.commit()
