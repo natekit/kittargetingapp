@@ -1,0 +1,29 @@
+# Exclude web frontend from Render builds
+web/
+node_modules/
+.git/
+*.log
+
+# Exclude development files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Exclude build artifacts
+dist/
+build/
+*.pyc
+__pycache__/
+.pytest_cache/
+
+# Exclude IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Exclude OS files
+.DS_Store
+Thumbs.db
