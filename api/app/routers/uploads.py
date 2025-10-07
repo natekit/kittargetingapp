@@ -35,6 +35,24 @@ async def test_creator_lookup(acct_id: str, db: Session = Depends(get_db)):
         }
 
 
+@router.post("/test-csv-upload")
+async def test_csv_upload(file: UploadFile = File(...)):
+    """Test endpoint to see what CSV content is being received"""
+    try:
+        content = await file.read()
+        csv_content = content.decode('utf-8')
+        return {
+            "filename": file.filename,
+            "size": len(content),
+            "content": csv_content,
+            "content_repr": repr(csv_content),
+            "lines": csv_content.split('\n'),
+            "line_count": len(csv_content.split('\n'))
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def extract_email_from_creator(creator_field: str) -> Optional[str]:
     """
     Extract email from Creator field, supporting [mailto:...] markdown format.
