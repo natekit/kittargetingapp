@@ -121,6 +121,12 @@ async def simple_conversion(
         return {"error": str(e)}
 
 
+@router.get("/test-simple")
+async def test_simple():
+    """Super simple test endpoint"""
+    return {"message": "API is working", "timestamp": datetime.utcnow().isoformat()}
+
+
 def extract_email_from_creator(creator_field: str) -> Optional[str]:
     """
     Extract email from Creator field, supporting [mailto:...] markdown format.
