@@ -15,6 +15,26 @@ from app.db import get_db
 router = APIRouter()
 
 
+@router.get("/test-creator-lookup/{acct_id}")
+async def test_creator_lookup(acct_id: str, db: Session = Depends(get_db)):
+    """Test endpoint to check if creator lookup works"""
+    creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+    if creator:
+        return {
+            "found": True,
+            "creator_id": creator.creator_id,
+            "name": creator.name,
+            "acct_id": creator.acct_id
+        }
+    else:
+        all_creators = db.query(Creator).all()
+        return {
+            "found": False,
+            "searched_for": acct_id,
+            "available_creators": [(c.creator_id, c.acct_id) for c in all_creators[:10]]
+        }
+
+
 def extract_email_from_creator(creator_field: str) -> Optional[str]:
     """
     Extract email from Creator field, supporting [mailto:...] markdown format.
