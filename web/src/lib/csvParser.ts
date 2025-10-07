@@ -51,6 +51,16 @@ export function parseCSVFile(
 ): Promise<CSVParsingResult> {
   console.log('Parsing file:', file.name, 'Size:', file.size, 'Type:', file.type);
   
+  // Debug: Read file content as text first
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const content = e.target?.result as string;
+    console.log('Raw file content length:', content.length);
+    console.log('Raw file content (first 500 chars):', content.substring(0, 500));
+    console.log('Raw file content (last 100 chars):', content.substring(Math.max(0, content.length - 100)));
+  };
+  reader.readAsText(file);
+  
   return new Promise((resolve, reject) => {
     // First try with auto-detection
     Papa.parse<string[]>(file, {
