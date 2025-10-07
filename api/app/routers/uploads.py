@@ -265,14 +265,20 @@ async def upload_conversions_data(
                 acct_id = row.get('Acct Id', '').strip()
                 conversions_str = row.get('Conversions', '').strip()
                 
+                print(f"DEBUG: Processing row - acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
+                
                 # Skip rows with missing required fields
                 if not acct_id or not conversions_str:
+                    print(f"DEBUG: Skipping row - missing fields. acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
                     continue
                 
                 # Find creator by acct_id
                 creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
                 if not creator:
+                    print(f"DEBUG: Creator not found for acct_id: '{acct_id}'")
                     continue
+                else:
+                    print(f"DEBUG: Found creator {creator.creator_id} for acct_id: '{acct_id}'")
                 
                 # Parse conversions count
                 try:
