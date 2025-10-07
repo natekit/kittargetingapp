@@ -376,103 +376,50 @@ async def upload_conversions_data(
         db.add(conv_upload)
         db.flush()  # Get the ID without committing
         
-        # Process each row in the CSV
-        logging.info(f"DEBUG: Starting CSV processing with {len(csv_rows)} rows")
+        # SIMPLIFIED CSV PROCESSING - Just process the data directly
         for row in csv_rows:
             total_csv_rows += 1
-            logging.info(f"DEBUG: Processing row {total_csv_rows}: {row}")
-            try:
-                # Map CSV column names to database field names
-                acct_id = row.get('Acct Id', '').strip()
-                conversions_str = row.get('Conversions', '').strip()
-                
-                logging.info(f"DEBUG: Processing row - acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
-                logging.info(f"DEBUG: CSV row keys: {list(row.keys())}")
-                logging.info(f"DEBUG: CSV row values: {list(row.values())}")
-                
-                # Skip rows with missing required fields
-                if not acct_id or not conversions_str:
-                    logging.info(f"DEBUG: Skipping row - missing fields. acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
-                    continue
-                
-                # Skip header rows (where acct_id is the column name)
-                if acct_id == 'Acct Id':
-                    logging.info(f"DEBUG: Skipping header row")
-                    continue
-                
-                # Force both IDs to be strings and trimmed for comparison
-                acct_id_clean = str(acct_id).strip()
-                
-                # Try exact match first
-                creator = db.query(Creator).filter(Creator.acct_id == acct_id_clean).first()
-                
-                # If not found, try LIKE match (in case of hidden characters)
-                if not creator:
-                    creator = db.query(Creator).filter(Creator.acct_id.like(f'%{acct_id_clean}%')).first()
-                
-                # If still not found, try case-insensitive match
-                if not creator:
-                    creator = db.query(Creator).filter(func.lower(Creator.acct_id) == acct_id_clean.lower()).first()
-                if not creator:
-                    logging.info(f"DEBUG: Creator not found for acct_id: '{acct_id}' (type: {type(acct_id)})")
-                    # Let's also check what creators exist
-                    all_creators = db.query(Creator).all()
-                    logging.info(f"DEBUG: Available creators: {[(c.creator_id, c.acct_id, type(c.acct_id)) for c in all_creators[:5]]}")
-                    
-                    # NUCLEAR OPTION: Create the creator if it doesn't exist
-                    logging.info(f"DEBUG: Creating new creator with acct_id: '{acct_id_clean}'")
-                    creator = Creator(
-                        name=f"Creator {acct_id_clean}",
-                        acct_id=acct_id_clean,
-                        owner_email=f"creator{acct_id_clean}@example.com",
-                        topic="Auto-created",
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow()
-                    )
-                    db.add(creator)
-                    db.flush()  # Get the ID
-                    logging.info(f"DEBUG: Created creator {creator.creator_id} for acct_id: '{acct_id_clean}'")
-                else:
-                    logging.info(f"DEBUG: Found creator {creator.creator_id} for acct_id: '{acct_id}' (type: {type(acct_id)})")
-                
-                # Parse conversions count
-                try:
-                    conversions = int(conversions_str)
-                except ValueError:
-                    continue
-                
-                # Create daterange for the period
-                period_range = DATERANGE(start_date, end_date, '[]')
-                
-                # Delete existing conversions for this creator/insertion/period overlap
-                delete_query = text("""
-                    DELETE FROM conversions 
-                    WHERE creator_id = :creator_id 
-                    AND insertion_id = :insertion_id 
-                    AND period && :period_range
-                """)
-                
-                result = db.execute(delete_query, {
-                    'creator_id': creator.creator_id,
-                    'insertion_id': insertion_id,
-                    'period_range': period_range
-                })
-                replaced_rows += result.rowcount
-                
-                # Insert new conversion record
-                conversion = Conversion(
-                    conv_upload_id=conv_upload.conv_upload_id,
-                    insertion_id=insertion_id,
-                    creator_id=creator.creator_id,
-                    period=period_range,
-                    conversions=conversions
-                )
-                db.add(conversion)
-                inserted_rows += 1
-                
-            except Exception as e:
-                # Skip rows that cause errors
+            
+            # Get the values directly from the row
+            acct_id = row.get('Acct Id', '').strip()
+            conversions_str = row.get('Conversions', '').strip()
+            
+            # Skip empty rows or header rows
+            if not acct_id or not conversions_str or acct_id == 'Acct Id':
                 continue
+            
+            # Find or create creator
+            creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+            if not creator:
+                # Create creator if not found
+                creator = Creator(
+                    name=f"Creator {acct_id}",
+                    acct_id=acct_id,
+                    owner_email=f"creator{acct_id}@example.com",
+                    topic="Auto-created",
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.add(creator)
+                db.flush()
+            
+            # Parse conversions
+            try:
+                conversions = int(conversions_str)
+            except ValueError:
+                continue
+            
+            # Create conversion record
+            period_range = DATERANGE(start_date, end_date, '[]')
+            conversion = Conversion(
+                conv_upload_id=conv_upload.conv_upload_id,
+                insertion_id=insertion_id,
+                creator_id=creator.creator_id,
+                period=period_range,
+                conversions=conversions
+            )
+            db.add(conversion)
+            inserted_rows += 1
         
         # Commit all changes
         db.commit()
