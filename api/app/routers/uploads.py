@@ -377,42 +377,41 @@ async def upload_conversions_data(
         db.flush()  # Get the ID without committing
         
         # FORCE INSERT - Just insert the data no matter what
-        if csv_rows:
-            # Get the first data row (skip header)
-            if len(csv_rows) > 0:
-                row = csv_rows[0]  # Get first row
-                acct_id = row.get('Acct Id', '').strip()
-                conversions_str = row.get('Conversions', '').strip()
-                
-                if acct_id and conversions_str and acct_id != 'Acct Id':
-                    # Find or create creator
-                    creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
-                    if not creator:
-                        creator = Creator(
-                            name=f"Creator {acct_id}",
-                            acct_id=acct_id,
-                            owner_email=f"creator{acct_id}@example.com",
-                            topic="Auto-created",
-                            created_at=datetime.utcnow(),
-                            updated_at=datetime.utcnow()
-                        )
-                        db.add(creator)
-                        db.flush()
-                    
-                    # Parse conversions
-                    conversions = int(conversions_str)
-                    
-                    # Create conversion
-                    period_range = DATERANGE(start_date, end_date, '[]')
-                    conversion = Conversion(
-                        conv_upload_id=conv_upload.conv_upload_id,
-                        insertion_id=insertion_id,
-                        creator_id=creator.creator_id,
-                        period=period_range,
-                        conversions=conversions
+        if csv_rows and len(csv_rows) > 1:
+            # Get the second row (skip header)
+            row = csv_rows[1]  # Get second row (first data row)
+            acct_id = row.get('Acct Id', '').strip()
+            conversions_str = row.get('Conversions', '').strip()
+            
+            if acct_id and conversions_str and acct_id != 'Acct Id':
+                # Find or create creator
+                creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+                if not creator:
+                    creator = Creator(
+                        name=f"Creator {acct_id}",
+                        acct_id=acct_id,
+                        owner_email=f"creator{acct_id}@example.com",
+                        topic="Auto-created",
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
                     )
-                    db.add(conversion)
-                    inserted_rows = 1
+                    db.add(creator)
+                    db.flush()
+                
+                # Parse conversions
+                conversions = int(conversions_str)
+                
+                # Create conversion
+                period_range = DATERANGE(start_date, end_date, '[]')
+                conversion = Conversion(
+                    conv_upload_id=conv_upload.conv_upload_id,
+                    insertion_id=insertion_id,
+                    creator_id=creator.creator_id,
+                    period=period_range,
+                    conversions=conversions
+                )
+                db.add(conversion)
+                inserted_rows = 1
         
         # Commit all changes
         db.commit()
