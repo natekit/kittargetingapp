@@ -102,11 +102,14 @@ export function ConversionsUploadForm() {
         const parseResult = await parseCSVFile(selectedFile);
         
         // Validate structure for conversions data
+        console.log('CSV data for validation:', parseResult.data);
         const validation = validateCSVStructure(parseResult.data, [
           'Acct Id', 'Conversions'
         ]);
+        console.log('Validation result:', validation);
         
         if (!validation.isValid) {
+          console.log('CSV validation failed:', validation.errors);
           setCsvErrors(validation.errors);
           toast.error('CSV validation failed. Please check the file format.');
           return;
