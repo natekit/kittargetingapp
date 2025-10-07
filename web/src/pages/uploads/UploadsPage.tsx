@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { PerformanceUploadForm } from './PerformanceUploadForm';
 import { ConversionsUploadForm } from './ConversionsUploadForm';
+import { ManualConversionForm } from './ManualConversionForm';
 
-type UploadType = 'performance' | 'conversions';
+type UploadType = 'performance' | 'conversions' | 'manual';
 
 export function UploadsPage() {
   const [activeTab, setActiveTab] = useState<UploadType>('performance');
@@ -11,6 +12,7 @@ export function UploadsPage() {
   const tabs = [
     { id: 'performance' as const, label: 'Performance Data', description: 'Upload click and performance metrics' },
     { id: 'conversions' as const, label: 'Conversions Data', description: 'Upload conversion tracking data' },
+    { id: 'manual' as const, label: 'Manual Entry', description: 'Add conversion data manually' },
   ];
 
   return (
@@ -75,6 +77,20 @@ export function UploadsPage() {
                 </div>
                 <div className="border-t pt-6">
                   <ConversionsUploadForm />
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'manual' && (
+              <div>
+                <div className="mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Manual Conversion Entry</h3>
+                  <p className="text-sm text-gray-600">
+                    Add conversion data manually without CSV upload. This bypasses the CSV processing issues.
+                  </p>
+                </div>
+                <div className="border-t pt-6">
+                  <ManualConversionForm />
                 </div>
               </div>
             )}

@@ -411,6 +411,26 @@ async def upload_conversions_data(
             
             # Create conversion record
             period_range = DATERANGE(start_date, end_date, '[]')
+            
+            # Delete existing conversions for this creator/insertion/period overlap first
+            try:
+                delete_query = text("""
+                    DELETE FROM conversions 
+                    WHERE creator_id = :creator_id 
+                    AND insertion_id = :insertion_id 
+                    AND period && :period_range
+                """)
+                
+                result = db.execute(delete_query, {
+                    'creator_id': creator.creator_id,
+                    'insertion_id': insertion_id,
+                    'period_range': period_range
+                })
+                replaced_rows += result.rowcount
+            except Exception as e:
+                # If deletion fails, continue anyway
+                pass
+            
             conversion = Conversion(
                 conv_upload_id=conv_upload.conv_upload_id,
                 insertion_id=insertion_id,
