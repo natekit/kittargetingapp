@@ -347,16 +347,10 @@ async def upload_conversions_data(
         # Read CSV content
         content = await file.read()
         csv_content = content.decode('utf-8')
-        logging.info(f"DEBUG: CSV content length: {len(csv_content)}")
-        logging.info(f"DEBUG: CSV content: {repr(csv_content)}")  # Use repr to show hidden characters
-        csv_reader = csv.DictReader(io.StringIO(csv_content))
-        logging.info(f"DEBUG: CSV fieldnames: {csv_reader.fieldnames}")
         
-        # Check if CSV has any rows at all
+        # Parse CSV once and get all rows
+        csv_reader = csv.DictReader(io.StringIO(csv_content))
         csv_rows = list(csv_reader)
-        logging.info(f"DEBUG: Total CSV rows found: {len(csv_rows)}")
-        for i, row in enumerate(csv_rows):
-            logging.info(f"DEBUG: Row {i}: {row}")
         
         replaced_rows = 0
         inserted_rows = 0
