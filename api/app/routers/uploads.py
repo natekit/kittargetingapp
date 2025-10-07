@@ -240,7 +240,10 @@ async def upload_conversions_data(
         # Read CSV content
         content = await file.read()
         csv_content = content.decode('utf-8')
+        print(f"DEBUG: CSV content length: {len(csv_content)}")
+        print(f"DEBUG: CSV content: {csv_content}")
         csv_reader = csv.DictReader(io.StringIO(csv_content))
+        print(f"DEBUG: CSV fieldnames: {csv_reader.fieldnames}")
         
         replaced_rows = 0
         inserted_rows = 0
