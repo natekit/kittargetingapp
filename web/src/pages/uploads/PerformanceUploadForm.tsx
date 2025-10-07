@@ -43,7 +43,9 @@ export function PerformanceUploadForm() {
   useEffect(() => {
     const fetchAdvertisers = async () => {
       try {
+        console.log('Fetching advertisers...');
         const data = await api.getAdvertisers();
+        console.log('Advertisers fetched:', data);
         setAdvertisers(data);
       } catch (error) {
         console.error('Error fetching advertisers:', error);
