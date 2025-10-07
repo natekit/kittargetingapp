@@ -279,8 +279,15 @@ async def upload_conversions_data(
                     logging.info(f"DEBUG: Skipping row - missing fields. acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
                     continue
                 
+                # Convert acct_id to integer for database lookup
+                try:
+                    acct_id_int = int(acct_id)
+                except ValueError:
+                    logging.info(f"DEBUG: Invalid acct_id format: '{acct_id}'")
+                    continue
+                
                 # Find creator by acct_id
-                creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+                creator = db.query(Creator).filter(Creator.acct_id == acct_id_int).first()
                 if not creator:
                     logging.info(f"DEBUG: Creator not found for acct_id: '{acct_id}' (type: {type(acct_id)})")
                     # Let's also check what creators exist
