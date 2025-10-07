@@ -275,10 +275,13 @@ async def upload_conversions_data(
                 # Find creator by acct_id
                 creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
                 if not creator:
-                    print(f"DEBUG: Creator not found for acct_id: '{acct_id}'")
+                    print(f"DEBUG: Creator not found for acct_id: '{acct_id}' (type: {type(acct_id)})")
+                    # Let's also check what creators exist
+                    all_creators = db.query(Creator).all()
+                    print(f"DEBUG: Available creators: {[(c.creator_id, c.acct_id, type(c.acct_id)) for c in all_creators[:5]]}")
                     continue
                 else:
-                    print(f"DEBUG: Found creator {creator.creator_id} for acct_id: '{acct_id}'")
+                    print(f"DEBUG: Found creator {creator.creator_id} for acct_id: '{acct_id}' (type: {type(acct_id)})")
                 
                 # Parse conversions count
                 try:
