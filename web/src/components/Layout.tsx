@@ -12,7 +12,8 @@ const navigation = [
   { name: 'Planner', href: '/planner' },
   { name: 'Admin', href: '/admin' },
   { name: 'Creators', href: '/admin/creators' },
-  { name: 'Uploads', href: '/uploads/performance' },
+  { name: 'Performance', href: '/uploads/performance' },
+  { name: 'Conversions', href: '/uploads/conversions' },
 ];
 
 export function Layout({ children }: LayoutProps) {
