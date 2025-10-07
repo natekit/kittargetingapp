@@ -101,7 +101,7 @@ export function ManualConversionForm() {
       }
       
       setResult(data);
-      toast.success(`Conversion added successfully! Creator ID: ${data.creator_id}, Conversion ID: ${data.conversion_id}`);
+      toast.success(`Conversion added successfully!`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast.error(`Failed to add conversion: ${errorMessage}`);
@@ -257,6 +257,7 @@ export function ManualConversionForm() {
                 <p>Conversion Upload ID: {result.conv_upload_id}</p>
                 <p>Creator ID: {result.creator_id}</p>
                 <p>Conversion ID: {result.conversion_id}</p>
+                <p>Success: {result.success ? 'Yes' : 'No'}</p>
               </div>
             </div>
           )}
