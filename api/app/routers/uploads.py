@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import DATERANGE
 import csv
 import io
 import re
+import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, date
 import pytz
@@ -240,10 +241,10 @@ async def upload_conversions_data(
         # Read CSV content
         content = await file.read()
         csv_content = content.decode('utf-8')
-        print(f"DEBUG: CSV content length: {len(csv_content)}")
-        print(f"DEBUG: CSV content: {csv_content}")
+        logging.info(f"DEBUG: CSV content length: {len(csv_content)}")
+        logging.info(f"DEBUG: CSV content: {csv_content}")
         csv_reader = csv.DictReader(io.StringIO(csv_content))
-        print(f"DEBUG: CSV fieldnames: {csv_reader.fieldnames}")
+        logging.info(f"DEBUG: CSV fieldnames: {csv_reader.fieldnames}")
         
         replaced_rows = 0
         inserted_rows = 0
@@ -268,23 +269,23 @@ async def upload_conversions_data(
                 acct_id = row.get('Acct Id', '').strip()
                 conversions_str = row.get('Conversions', '').strip()
                 
-                print(f"DEBUG: Processing row - acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
+                logging.info(f"DEBUG: Processing row - acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
                 
                 # Skip rows with missing required fields
                 if not acct_id or not conversions_str:
-                    print(f"DEBUG: Skipping row - missing fields. acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
+                    logging.info(f"DEBUG: Skipping row - missing fields. acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
                     continue
                 
                 # Find creator by acct_id
                 creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
                 if not creator:
-                    print(f"DEBUG: Creator not found for acct_id: '{acct_id}' (type: {type(acct_id)})")
+                    logging.info(f"DEBUG: Creator not found for acct_id: '{acct_id}' (type: {type(acct_id)})")
                     # Let's also check what creators exist
                     all_creators = db.query(Creator).all()
-                    print(f"DEBUG: Available creators: {[(c.creator_id, c.acct_id, type(c.acct_id)) for c in all_creators[:5]]}")
+                    logging.info(f"DEBUG: Available creators: {[(c.creator_id, c.acct_id, type(c.acct_id)) for c in all_creators[:5]]}")
                     continue
                 else:
-                    print(f"DEBUG: Found creator {creator.creator_id} for acct_id: '{acct_id}' (type: {type(acct_id)})")
+                    logging.info(f"DEBUG: Found creator {creator.creator_id} for acct_id: '{acct_id}' (type: {type(acct_id)})")
                 
                 # Parse conversions count
                 try:
