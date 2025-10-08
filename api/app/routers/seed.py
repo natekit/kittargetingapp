@@ -32,25 +32,44 @@ async def seed_creators(
         upserted = 0
         skipped = 0
         
+        # Debug: Print available headers
+        if csv_reader.fieldnames:
+            print(f"DEBUG: Available CSV headers: {csv_reader.fieldnames}")
+        
         for row in csv_reader:
             try:
-                # Extract data from CSV row
-                owner_email = row.get('owner_email', '').strip().lower()
-                acct_id = row.get('acct_id', '').strip()
-                name = row.get('name', '').strip()
-                topic = row.get('topic', '').strip()
+                # Debug: Print first row data
+                if row:
+                    print(f"DEBUG: First row data: {dict(row)}")
                 
-                # Parse conservative click estimate
+                # Extract data from CSV row with header standardization
+                owner_email = (row.get('owner_email', '') or row.get('owner email', '') or row.get('email', '')).strip().lower()
+                acct_id = (row.get('acct_id', '') or row.get('acct id', '') or row.get('account_id', '') or row.get('account id', '')).strip()
+                name = (row.get('name', '') or row.get('creator_name', '') or row.get('creator name', '')).strip()
+                topic = (row.get('topic', '') or row.get('category', '') or row.get('niche', '')).strip()
+                
+                # Parse conservative click estimate with multiple header variations
                 conservative_click_estimate = None
-                if 'conservative_click_estimate' in row and row['conservative_click_estimate'].strip():
-                    try:
-                        conservative_click_estimate = int(row['conservative_click_estimate'].strip())
-                    except ValueError:
-                        # Skip invalid values
-                        pass
+                estimate_fields = [
+                    'conservative_click_estimate', 'conservative click estimate', 
+                    'conservative_clicks', 'conservative clicks',
+                    'click_estimate', 'click estimate'
+                ]
+                
+                for field in estimate_fields:
+                    if field in row and row[field].strip():
+                        try:
+                            conservative_click_estimate = int(row[field].strip())
+                            break
+                        except ValueError:
+                            continue
+                
+                # Debug: Print extracted values
+                print(f"DEBUG: Extracted - owner_email: '{owner_email}', acct_id: '{acct_id}', name: '{name}', topic: '{topic}', conservative_click_estimate: {conservative_click_estimate}")
                 
                 # Skip rows with missing required fields
                 if not owner_email or not acct_id:
+                    print(f"DEBUG: Skipping row - missing required fields")
                     skipped += 1
                     continue
                 
