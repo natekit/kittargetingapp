@@ -309,7 +309,8 @@ async def upload_conversions_data(
                 
                 # Create conversion
                 try:
-                    period_range = DATERANGE(start_date, end_date, '[]')
+                    # Create daterange using PostgreSQL syntax
+                    period_range = f"[{start_date},{end_date}]"
                     print(f"DEBUG: Created period_range: {period_range}")
                     
                     conversion = Conversion(
