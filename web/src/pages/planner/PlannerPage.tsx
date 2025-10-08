@@ -18,6 +18,7 @@ export function PlannerPage() {
     cpc: '',
     budget: '',
     target_cpa: '',
+    advertiser_avg_cvr: '',
     horizon_days: 30,
   });
 
@@ -60,9 +61,17 @@ export function PlannerPage() {
     try {
       const requestData: any = {
         budget: parseFloat(formData.budget),
-        target_cpa: parseFloat(formData.target_cpa),
         horizon_days: formData.horizon_days,
       };
+      
+      // Add optional fields only if they have values
+      if (formData.target_cpa && formData.target_cpa.trim() !== '') {
+        requestData.target_cpa = parseFloat(formData.target_cpa);
+      }
+      
+      if (formData.advertiser_avg_cvr && formData.advertiser_avg_cvr.trim() !== '') {
+        requestData.advertiser_avg_cvr = parseFloat(formData.advertiser_avg_cvr);
+      }
 
       if (formData.category) {
         requestData.category = formData.category;
@@ -228,7 +237,7 @@ export function PlannerPage() {
 
               <div>
                 <label htmlFor="target_cpa" className="block text-sm font-medium text-gray-700">
-                  Target CPA *
+                  Target CPA (Optional)
                 </label>
                 <Input
                   id="target_cpa"
@@ -237,10 +246,32 @@ export function PlannerPage() {
                   step="0.01"
                   value={formData.target_cpa}
                   onChange={(e) => setFormData({ ...formData, target_cpa: e.target.value })}
-                  required
                   className="mt-1"
                   placeholder="3.25"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Leave blank to prioritize by CVR instead of CPA
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="advertiser_avg_cvr" className="block text-sm font-medium text-gray-700">
+                  Advertiser Average CVR (Optional)
+                </label>
+                <Input
+                  id="advertiser_avg_cvr"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.001"
+                  value={formData.advertiser_avg_cvr}
+                  onChange={(e) => setFormData({ ...formData, advertiser_avg_cvr: e.target.value })}
+                  className="mt-1"
+                  placeholder="0.025"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Use your advertiser's average CVR for better fallback estimates (e.g., 0.025 = 2.5%)
+                </p>
               </div>
 
               <div>
