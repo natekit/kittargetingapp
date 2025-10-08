@@ -3,12 +3,59 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import csv
 import io
-from typing import Dict, Any
+from typing import Dict, Any, List
 from app.models import Creator
 from app.db import get_db
 from datetime import datetime
 
 router = APIRouter()
+
+
+def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
+    """Process a batch of creators with upsert logic."""
+    upserted = 0
+    current_time = datetime.utcnow()
+    
+    for creator_data in batch:
+        try:
+            # Check if creator exists by owner_email (case-insensitive) or acct_id
+            existing_creator = db.query(Creator).filter(
+                (func.lower(Creator.owner_email) == creator_data['owner_email']) | 
+                (Creator.acct_id == creator_data['acct_id'])
+            ).first()
+            
+            if existing_creator:
+                # Update existing creator
+                existing_creator.name = creator_data['name'] or existing_creator.name
+                existing_creator.topic = creator_data['topic'] or existing_creator.topic
+                existing_creator.updated_at = current_time
+                # Update acct_id if it's different (in case we found by email)
+                if existing_creator.acct_id != creator_data['acct_id']:
+                    existing_creator.acct_id = creator_data['acct_id']
+                # Update conservative click estimate if provided
+                if creator_data['conservative_click_estimate'] is not None:
+                    existing_creator.conservative_click_estimate = creator_data['conservative_click_estimate']
+                upserted += 1
+            else:
+                # Create new creator
+                new_creator = Creator(
+                    name=creator_data['name'],
+                    acct_id=creator_data['acct_id'],
+                    owner_email=creator_data['owner_email'],
+                    topic=creator_data['topic'],
+                    conservative_click_estimate=creator_data['conservative_click_estimate'],
+                    created_at=current_time,
+                    updated_at=current_time
+                )
+                db.add(new_creator)
+                upserted += 1
+        except Exception as e:
+            print(f"DEBUG: Error processing creator {creator_data.get('acct_id', 'unknown')}: {e}")
+            continue
+    
+    # Commit the batch
+    db.commit()
+    return upserted
 
 
 @router.post("/seed/creators")
@@ -31,6 +78,8 @@ async def seed_creators(
         
         upserted = 0
         skipped = 0
+        batch_size = 50  # Process in batches of 50
+        batch = []
         
         # Debug: Print available headers
         if csv_reader.fieldnames:
@@ -73,47 +122,28 @@ async def seed_creators(
                     skipped += 1
                     continue
                 
-                # Check if creator exists by owner_email (case-insensitive) or acct_id
-                existing_creator = db.query(Creator).filter(
-                    (func.lower(Creator.owner_email) == owner_email) | 
-                    (Creator.acct_id == acct_id)
-                ).first()
+                # Add to batch for processing
+                batch.append({
+                    'owner_email': owner_email,
+                    'acct_id': acct_id,
+                    'name': name,
+                    'topic': topic,
+                    'conservative_click_estimate': conservative_click_estimate
+                })
                 
-                current_time = datetime.utcnow()
-                
-                if existing_creator:
-                    # Update existing creator
-                    existing_creator.name = name or existing_creator.name
-                    existing_creator.topic = topic or existing_creator.topic
-                    existing_creator.updated_at = current_time
-                    # Update acct_id if it's different (in case we found by email)
-                    if existing_creator.acct_id != acct_id:
-                        existing_creator.acct_id = acct_id
-                    # Update conservative click estimate if provided
-                    if conservative_click_estimate is not None:
-                        existing_creator.conservative_click_estimate = conservative_click_estimate
-                    upserted += 1
-                else:
-                    # Create new creator
-                    new_creator = Creator(
-                        name=name,
-                        acct_id=acct_id,
-                        owner_email=owner_email,
-                        topic=topic,
-                        conservative_click_estimate=conservative_click_estimate,
-                        created_at=current_time,
-                        updated_at=current_time
-                    )
-                    db.add(new_creator)
-                    upserted += 1
+                # Process batch when it reaches batch_size
+                if len(batch) >= batch_size:
+                    upserted += process_batch(db, batch)
+                    batch = []
                     
             except Exception as e:
                 # Skip rows that cause errors
                 skipped += 1
                 continue
         
-        # Commit all changes
-        db.commit()
+        # Process any remaining items in the final batch
+        if batch:
+            upserted += process_batch(db, batch)
         
         return {
             "upserted": upserted,
