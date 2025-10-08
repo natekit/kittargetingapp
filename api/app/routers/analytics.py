@@ -17,7 +17,8 @@ class PlanRequest(BaseModel):
     insertion_id: Optional[int] = None
     cpc: Optional[float] = None
     budget: float
-    target_cpa: float
+    target_cpa: Optional[float] = None
+    advertiser_avg_cvr: Optional[float] = None
     horizon_days: int
 
 
@@ -183,11 +184,14 @@ async def create_plan(
     if plan_request.budget <= 0:
         raise HTTPException(status_code=400, detail="Budget must be greater than 0")
     
-    if plan_request.target_cpa <= 0:
+    if plan_request.target_cpa is not None and plan_request.target_cpa <= 0:
         raise HTTPException(status_code=400, detail="Target CPA must be greater than 0")
     
     if plan_request.horizon_days <= 0:
         raise HTTPException(status_code=400, detail="Horizon days must be greater than 0")
+    
+    if plan_request.advertiser_avg_cvr is not None and (plan_request.advertiser_avg_cvr <= 0 or plan_request.advertiser_avg_cvr >= 1):
+        raise HTTPException(status_code=400, detail="Advertiser average CVR must be between 0 and 1")
     
     # Get CPC from insertion if not provided
     cpc = plan_request.cpc
@@ -240,6 +244,9 @@ async def create_plan(
     creator_stats = []
     global_baseline_cvr = 0.005  # 0.5%
     
+    # Use advertiser average CVR if provided, otherwise use global baseline
+    advertiser_cvr = plan_request.advertiser_avg_cvr if plan_request.advertiser_avg_cvr is not None else global_baseline_cvr
+    
     for creator in creators:
         # Get historical clicks and conversions for this creator
         clicks_query = db.query(func.sum(ClickUnique.unique_clicks)).join(
@@ -287,13 +294,13 @@ async def create_plan(
             if overall_clicks > 0:
                 category_cvr = overall_conversions / overall_clicks
             else:
-                category_cvr = global_baseline_cvr
+                category_cvr = advertiser_cvr
         
-        expected_cvr = max(category_cvr, global_baseline_cvr)
+        expected_cvr = max(category_cvr, advertiser_cvr)
         expected_cpa = cpc / expected_cvr if expected_cvr > 0 else float('inf')
         
-        # Filter by target CPA
-        if expected_cpa <= plan_request.target_cpa:
+        # Filter by target CPA (if provided)
+        if plan_request.target_cpa is None or expected_cpa <= plan_request.target_cpa:
             # Calculate actual historical days from data
             historical_days_query = db.query(
                 func.max(ClickUnique.execution_date) - func.min(ClickUnique.execution_date)
@@ -343,8 +350,13 @@ async def create_plan(
                 'value_ratio': value_ratio
             })
     
-    # Sort by value ratio (descending)
-    creator_stats.sort(key=lambda x: x['value_ratio'], reverse=True)
+    # Sort by value ratio (descending) or CVR if no CPA target
+    if plan_request.target_cpa is None:
+        # When no CPA target, prioritize by CVR
+        creator_stats.sort(key=lambda x: x['expected_cvr'], reverse=True)
+    else:
+        # When CPA target exists, prioritize by value ratio
+        creator_stats.sort(key=lambda x: x['value_ratio'], reverse=True)
     
     # Greedy allocation
     picked_creators = []
