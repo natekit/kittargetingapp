@@ -268,15 +268,16 @@ async def upload_conversions_data(
             print(f"DEBUG: First row: {csv_rows[0] if len(csv_rows) > 0 else 'None'}")
             print(f"DEBUG: Second row: {csv_rows[1] if len(csv_rows) > 1 else 'None'}")
         
-        if csv_rows and len(csv_rows) > 1:
-            # Get the second row (skip header)
-            row = csv_rows[1]  # Get second row (first data row)
+        if csv_rows and len(csv_rows) >= 1:
+            # Get the first row (data row) - handle both single row and header+data cases
+            row = csv_rows[0]  # Get first row
             acct_id = row.get('Acct Id', '').strip()
             conversions_str = row.get('Conversions', '').strip()
             
             print(f"DEBUG: acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
             
-            if acct_id and conversions_str and acct_id != 'Acct Id':
+            # Skip if this looks like a header row
+            if acct_id and conversions_str and acct_id != 'Acct Id' and conversions_str != 'Conversions':
                 # Find or create creator
                 creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
                 if not creator:
