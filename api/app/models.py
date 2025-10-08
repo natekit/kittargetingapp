@@ -54,6 +54,7 @@ class Creator(Base):
     acct_id = Column(String(100), unique=True, nullable=False, index=True)
     owner_email = Column(CITEXT, unique=True, nullable=False, index=True)
     topic = Column(Text, nullable=True)
+    conservative_click_estimate = Column(Integer, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False)
     

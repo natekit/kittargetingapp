@@ -248,7 +248,7 @@ async def create_plan(
     advertiser_cvr = plan_request.advertiser_avg_cvr if plan_request.advertiser_avg_cvr is not None else global_baseline_cvr
     
     for creator in creators:
-        # Get historical clicks and conversions for this creator
+        # STEP 1: Get click estimates (historical or conservative)
         clicks_query = db.query(func.sum(ClickUnique.unique_clicks)).join(
             PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
         ).join(
@@ -266,6 +266,15 @@ async def create_plan(
         
         total_clicks = clicks_query.scalar() or 0
         
+        # If no historical clicks, use conservative estimate
+        if total_clicks == 0:
+            if creator.conservative_click_estimate:
+                total_clicks = creator.conservative_click_estimate
+            else:
+                # No clicks and no estimate - exclude this creator
+                continue
+        
+        # STEP 2: Get CVR estimates (historical or fallback)
         conversions_query = db.query(func.sum(Conversion.conversions)).join(
             ConvUpload, ConvUpload.conv_upload_id == Conversion.conv_upload_id
         ).filter(Conversion.creator_id == creator.creator_id)
@@ -279,9 +288,10 @@ async def create_plan(
         
         total_conversions = conversions_query.scalar() or 0
         
-        # Calculate CVR with fallbacks
-        if total_clicks > 0:
-            category_cvr = total_conversions / total_clicks
+        # Calculate CVR with proper fallbacks
+        if total_clicks > 0 and total_conversions > 0:
+            # Use historical CVR
+            expected_cvr = total_conversions / total_clicks
         else:
             # Fallback to overall creator CVR
             overall_clicks = db.query(func.sum(ClickUnique.unique_clicks)).filter(
@@ -291,12 +301,11 @@ async def create_plan(
                 Conversion.creator_id == creator.creator_id
             ).scalar() or 0
             
-            if overall_clicks > 0:
-                category_cvr = overall_conversions / overall_clicks
+            if overall_clicks > 0 and overall_conversions > 0:
+                expected_cvr = overall_conversions / overall_clicks
             else:
-                category_cvr = advertiser_cvr
-        
-        expected_cvr = max(category_cvr, advertiser_cvr)
+                # Use advertiser CVR or global baseline
+                expected_cvr = advertiser_cvr
         expected_cpa = cpc / expected_cvr if expected_cvr > 0 else float('inf')
         
         # Filter by target CPA (if provided)

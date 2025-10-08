@@ -40,6 +40,15 @@ async def seed_creators(
                 name = row.get('name', '').strip()
                 topic = row.get('topic', '').strip()
                 
+                # Parse conservative click estimate
+                conservative_click_estimate = None
+                if 'conservative_click_estimate' in row and row['conservative_click_estimate'].strip():
+                    try:
+                        conservative_click_estimate = int(row['conservative_click_estimate'].strip())
+                    except ValueError:
+                        # Skip invalid values
+                        pass
+                
                 # Skip rows with missing required fields
                 if not owner_email or not acct_id:
                     skipped += 1
@@ -61,6 +70,9 @@ async def seed_creators(
                     # Update acct_id if it's different (in case we found by email)
                     if existing_creator.acct_id != acct_id:
                         existing_creator.acct_id = acct_id
+                    # Update conservative click estimate if provided
+                    if conservative_click_estimate is not None:
+                        existing_creator.conservative_click_estimate = conservative_click_estimate
                     upserted += 1
                 else:
                     # Create new creator
@@ -69,6 +81,7 @@ async def seed_creators(
                         acct_id=acct_id,
                         owner_email=owner_email,
                         topic=topic,
+                        conservative_click_estimate=conservative_click_estimate,
                         created_at=current_time,
                         updated_at=current_time
                     )
