@@ -278,9 +278,13 @@ async def upload_conversions_data(
             
             # Skip if this looks like a header row
             if acct_id and conversions_str and acct_id != 'Acct Id' and conversions_str != 'Conversions':
+                print(f"DEBUG: Processing data - acct_id: {acct_id}, conversions_str: {conversions_str}")
+                
                 # Find or create creator
                 creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+                print(f"DEBUG: Creator found: {creator is not None}")
                 if not creator:
+                    print(f"DEBUG: Creating new creator for acct_id: {acct_id}")
                     creator = Creator(
                         name=f"Creator {acct_id}",
                         acct_id=acct_id,
@@ -291,21 +295,38 @@ async def upload_conversions_data(
                     )
                     db.add(creator)
                     db.flush()
+                    print(f"DEBUG: Creator created with ID: {creator.creator_id}")
+                else:
+                    print(f"DEBUG: Using existing creator with ID: {creator.creator_id}")
                 
                 # Parse conversions
-                conversions = int(conversions_str)
+                try:
+                    conversions = int(conversions_str)
+                    print(f"DEBUG: Parsed conversions: {conversions}")
+                except ValueError as e:
+                    print(f"DEBUG: Error parsing conversions: {e}")
+                    raise
                 
                 # Create conversion
-                period_range = DATERANGE(start_date, end_date, '[]')
-                conversion = Conversion(
-                    conv_upload_id=conv_upload.conv_upload_id,
-                    insertion_id=insertion_id,
-                    creator_id=creator.creator_id,
-                    period=period_range,
-                    conversions=conversions
-                )
-                db.add(conversion)
-                inserted_rows = 1
+                try:
+                    period_range = DATERANGE(start_date, end_date, '[]')
+                    print(f"DEBUG: Created period_range: {period_range}")
+                    
+                    conversion = Conversion(
+                        conv_upload_id=conv_upload.conv_upload_id,
+                        insertion_id=insertion_id,
+                        creator_id=creator.creator_id,
+                        period=period_range,
+                        conversions=conversions
+                    )
+                    print(f"DEBUG: Created conversion object")
+                    db.add(conversion)
+                    print(f"DEBUG: Added conversion to database")
+                    inserted_rows = 1
+                    print(f"DEBUG: Set inserted_rows = 1")
+                except Exception as e:
+                    print(f"DEBUG: Error creating conversion: {e}")
+                    raise
         
         # Process each row in the CSV (old logic for multiple rows)
         for row in csv_rows[2:] if len(csv_rows) > 2 else []:
