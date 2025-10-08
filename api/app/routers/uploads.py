@@ -263,11 +263,18 @@ async def upload_conversions_data(
         db.flush()  # Get the ID without committing
         
         # FORCE INSERT - Just insert the data no matter what
+        print(f"DEBUG: CSV rows count: {len(csv_rows) if csv_rows else 0}")
+        if csv_rows:
+            print(f"DEBUG: First row: {csv_rows[0] if len(csv_rows) > 0 else 'None'}")
+            print(f"DEBUG: Second row: {csv_rows[1] if len(csv_rows) > 1 else 'None'}")
+        
         if csv_rows and len(csv_rows) > 1:
             # Get the second row (skip header)
             row = csv_rows[1]  # Get second row (first data row)
             acct_id = row.get('Acct Id', '').strip()
             conversions_str = row.get('Conversions', '').strip()
+            
+            print(f"DEBUG: acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
             
             if acct_id and conversions_str and acct_id != 'Acct Id':
                 # Find or create creator
