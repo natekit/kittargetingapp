@@ -7,6 +7,57 @@ export interface CSVParsingResult {
 }
 
 /**
+ * Standardize CSV headers to handle case and space variations
+ */
+export function standardizeHeaders(headers: string[]): string[] {
+  const headerMap: Record<string, string> = {
+    // Account ID variations
+    'acct id': 'acct_id',
+    'acct_id': 'acct_id',
+    'account id': 'acct_id',
+    'account_id': 'acct_id',
+    'acctid': 'acct_id',
+    'accountid': 'acct_id',
+    
+    // Conversions variations
+    'conversions': 'conversions',
+    'conversion': 'conversions',
+    'conv': 'conversions',
+    'converted': 'conversions',
+    
+    // Clicks variations
+    'clicks': 'clicks',
+    'click': 'clicks',
+    'unique_clicks': 'clicks',
+    'unique clicks': 'clicks',
+    
+    // Conservative click estimate variations
+    'conservative_click_estimate': 'conservative_click_estimate',
+    'conservative click estimate': 'conservative_click_estimate',
+    'conservative clicks': 'conservative_click_estimate',
+    'conservative_clicks': 'conservative_click_estimate',
+    'click_estimate': 'conservative_click_estimate',
+    'click estimate': 'conservative_click_estimate',
+    
+    // Creator fields
+    'name': 'name',
+    'creator_name': 'name',
+    'creator name': 'name',
+    'owner_email': 'owner_email',
+    'owner email': 'owner_email',
+    'email': 'owner_email',
+    'topic': 'topic',
+    'category': 'topic',
+    'niche': 'topic'
+  };
+  
+  return headers.map(header => {
+    const normalized = header.toLowerCase().trim();
+    return headerMap[normalized] || header;
+  });
+}
+
+/**
  * Parse CSV content using Papa Parse with proper handling of:
  * - Commas within quoted fields
  * - Escaped quotes
@@ -34,6 +85,17 @@ export function parseCSV(csvContent: string): CSVParsingResult {
   console.log('Papa Parse result:', result);
   console.log('Data length:', result.data?.length);
   console.log('First few rows:', result.data?.slice(0, 3));
+
+  // Standardize headers if we have data
+  if (result.data && result.data.length > 0) {
+    const headers = result.data[0];
+    const standardizedHeaders = standardizeHeaders(headers);
+    console.log('Original headers:', headers);
+    console.log('Standardized headers:', standardizedHeaders);
+    
+    // Replace the first row with standardized headers
+    result.data[0] = standardizedHeaders;
+  }
 
   return {
     data: result.data as string[][],

@@ -271,13 +271,14 @@ async def upload_conversions_data(
         if csv_rows and len(csv_rows) >= 1:
             # Get the first row (data row) - handle both single row and header+data cases
             row = csv_rows[0]  # Get first row
-            acct_id = row.get('Acct Id', '').strip()
-            conversions_str = row.get('Conversions', '').strip()
+            # Handle both original and standardized headers
+            acct_id = row.get('Acct Id', row.get('acct_id', '')).strip()
+            conversions_str = row.get('Conversions', row.get('conversions', '')).strip()
             
             print(f"DEBUG: acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
             
             # Skip if this looks like a header row
-            if acct_id and conversions_str and acct_id != 'Acct Id' and conversions_str != 'Conversions':
+            if acct_id and conversions_str and acct_id not in ['Acct Id', 'acct_id'] and conversions_str not in ['Conversions', 'conversions']:
                 print(f"DEBUG: Processing data - acct_id: {acct_id}, conversions_str: {conversions_str}")
                 
                 # Find or create creator
@@ -332,8 +333,9 @@ async def upload_conversions_data(
         # Process each row in the CSV (old logic for multiple rows)
         for row in csv_rows[2:] if len(csv_rows) > 2 else []:
             try:
-                acct_id = row.get('Acct Id', '').strip()
-                conversions_str = row.get('Conversions', '').strip()
+                # Handle both original and standardized headers
+                acct_id = row.get('Acct Id', row.get('acct_id', '')).strip()
+                conversions_str = row.get('Conversions', row.get('conversions', '')).strip()
                 
                 # Skip rows with missing required fields
                 if not acct_id or not conversions_str:

@@ -63,12 +63,12 @@ async def get_leaderboard(
     """
     Get creator leaderboard with clicks, conversions, CVR, and optionally expected CPA.
     """
-    # Base query for clicks
+    # Base query for average clicks per insertion
     clicks_query = db.query(
         Creator.creator_id,
         Creator.name,
         Creator.acct_id,
-        func.sum(ClickUnique.unique_clicks).label('clicks')
+        func.avg(ClickUnique.unique_clicks).label('avg_clicks_per_insertion')
     ).join(
         ClickUnique, ClickUnique.creator_id == Creator.creator_id
     ).join(
@@ -112,11 +112,11 @@ async def get_leaderboard(
         clicks_subquery.c.creator_id,
         clicks_subquery.c.name,
         clicks_subquery.c.acct_id,
-        func.coalesce(clicks_subquery.c.clicks, 0).label('clicks'),
+        func.coalesce(clicks_subquery.c.avg_clicks_per_insertion, 0).label('clicks'),
         func.coalesce(conversions_subquery.c.conversions, 0).label('conversions'),
         case(
-            (clicks_subquery.c.clicks > 0, 
-             func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.clicks, 0)),
+            (clicks_subquery.c.avg_clicks_per_insertion > 0, 
+             func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks_per_insertion, 0)),
             else_=0.0
         ).label('cvr')
     ).outerjoin(
@@ -128,9 +128,9 @@ async def get_leaderboard(
     if cpc and cpc > 0:
         main_query = main_query.add_columns(
             case(
-                (clicks_subquery.c.clicks > 0,
+                (clicks_subquery.c.avg_clicks_per_insertion > 0,
                  cpc / func.nullif(
-                     func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.clicks, 0),
+                     func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks_per_insertion, 0),
                      0
                  )),
                 else_=None
