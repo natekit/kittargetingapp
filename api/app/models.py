@@ -153,6 +153,25 @@ class Conversion(Base):
     )
 
 
+class DeclinedCreator(Base):
+    __tablename__ = "declined_creators"
+    
+    declined_id = Column(Integer, primary_key=True, index=True)
+    creator_id = Column(Integer, ForeignKey("creators.creator_id"), nullable=False)
+    advertiser_id = Column(Integer, ForeignKey("advertisers.advertiser_id"), nullable=False)
+    declined_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    reason = Column(String(255), nullable=True)  # Optional reason for decline
+    
+    # Relationships
+    creator = relationship("Creator")
+    advertiser = relationship("Advertiser")
+    
+    # Unique constraint to prevent duplicate declined records
+    __table_args__ = (
+        CheckConstraint("creator_id != advertiser_id", name="check_creator_not_advertiser"),
+    )
+
+
 # Update relationships
 Advertiser.campaigns = relationship("Campaign", back_populates="advertiser")
 

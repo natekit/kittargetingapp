@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 import logging
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
-from app.models import Creator, ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion, ConvUpload
+from app.models import Creator, ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion, ConvUpload, DeclinedCreator
 from app.db import get_db
 
 router = APIRouter()
@@ -51,6 +51,41 @@ class PlanResponse(BaseModel):
     total_conversions: float
     blended_cpa: float
     budget_utilization: float
+
+
+@router.get("/declined-creators/{advertiser_id}")
+async def get_declined_creators(
+    advertiser_id: int,
+    db: Session = Depends(get_db)
+) -> List[Dict[str, Any]]:
+    """
+    Get all creators who have declined to work with a specific advertiser.
+    """
+    declined_creators = db.query(
+        DeclinedCreator,
+        Creator.name,
+        Creator.acct_id,
+        Advertiser.name.label("advertiser_name")
+    ).join(
+        Creator, Creator.creator_id == DeclinedCreator.creator_id
+    ).join(
+        Advertiser, Advertiser.advertiser_id == DeclinedCreator.advertiser_id
+    ).filter(
+        DeclinedCreator.advertiser_id == advertiser_id
+    ).all()
+    
+    return [
+        {
+            "declined_id": dc.DeclinedCreator.declined_id,
+            "creator_id": dc.DeclinedCreator.creator_id,
+            "creator_name": dc.name,
+            "acct_id": dc.acct_id,
+            "advertiser_name": dc.advertiser_name,
+            "declined_at": dc.DeclinedCreator.declined_at,
+            "reason": dc.DeclinedCreator.reason
+        }
+        for dc in declined_creators
+    ]
 
 
 @router.get("/leaderboard")
@@ -230,6 +265,15 @@ async def create_plan(
     
     creators = creators_query.distinct().all()
     logging.info(f"Found {len(creators)} creators for planning")
+    
+    # Filter out declined creators for this advertiser
+    if plan_request.advertiser_id:
+        declined_creator_ids = db.query(DeclinedCreator.creator_id).filter(
+            DeclinedCreator.advertiser_id == plan_request.advertiser_id
+        ).all()
+        declined_ids = [dc[0] for dc in declined_creator_ids]
+        creators = [c for c in creators if c.creator_id not in declined_ids]
+        logging.info(f"After filtering declined creators: {len(creators)} creators remaining")
     
     if not creators:
         return PlanResponse(

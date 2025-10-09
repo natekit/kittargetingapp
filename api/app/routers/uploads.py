@@ -8,7 +8,7 @@ import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime, date
 import pytz
-from app.models import Creator, PerfUpload, ClickUnique, Insertion, ConvUpload, Conversion, Advertiser, Campaign
+from app.models import Creator, PerfUpload, ClickUnique, Insertion, ConvUpload, Conversion, Advertiser, Campaign, DeclinedCreator
 from app.db import get_db
 
 router = APIRouter()
@@ -104,6 +104,7 @@ async def upload_performance_data(
         inserted_rows = 0
         unmatched_count = 0
         unmatched_examples = []
+        declined_count = 0
         
         # Create perf_upload record
         perf_upload = PerfUpload(
@@ -177,6 +178,27 @@ async def upload_performance_data(
                 db.add(click_unique)
                 inserted_rows += 1
                 
+                # Check if status is "declined" and record it
+                if status and status.lower() == "declined":
+                    # Get advertiser_id from the insertion's campaign
+                    advertiser_id = insertion.campaign.advertiser_id
+                    
+                    # Check if this creator-advertiser combination is already declined
+                    existing_decline = db.query(DeclinedCreator).filter(
+                        DeclinedCreator.creator_id == creator.creator_id,
+                        DeclinedCreator.advertiser_id == advertiser_id
+                    ).first()
+                    
+                    if not existing_decline:
+                        # Record the declined creator-advertiser combination
+                        declined_creator = DeclinedCreator(
+                            creator_id=creator.creator_id,
+                            advertiser_id=advertiser_id,
+                            reason=f"Declined from performance upload on {execution_date}"
+                        )
+                        db.add(declined_creator)
+                        declined_count += 1
+                
             except Exception as e:
                 # Skip rows that cause errors
                 continue
@@ -191,7 +213,8 @@ async def upload_performance_data(
             "perf_upload_id": perf_upload.perf_upload_id,
             "inserted_rows": inserted_rows,
             "unmatched_count": unmatched_count,
-            "unmatched_examples": unmatched_examples
+            "unmatched_examples": unmatched_examples,
+            "declined_count": declined_count
         }
         
     except Exception as e:
