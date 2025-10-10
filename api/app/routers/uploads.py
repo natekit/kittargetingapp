@@ -299,23 +299,6 @@ async def upload_conversions_data(
         db.add(conv_upload)
         db.flush()  # Get the ID without committing
         
-        # Extract all acct_ids from CSV for efficient lookup
-        csv_acct_ids = []
-        for row in csv_rows:
-            acct_id = row.get('Acct ID', row.get('Acct Id', row.get('acct_id', ''))).strip()
-            if acct_id and acct_id not in ['Acct ID', 'Acct Id', 'acct_id']:
-                csv_acct_ids.append(acct_id)
-        
-        print(f"DEBUG: Looking for creators with acct_ids: {csv_acct_ids}")
-        
-        # Get all matching creators in one query
-        creators_by_acct_id = {}
-        if csv_acct_ids:
-            creators = db.query(Creator).filter(Creator.acct_id.in_(csv_acct_ids)).all()
-            for creator in creators:
-                creators_by_acct_id[creator.acct_id] = creator
-            print(f"DEBUG: Found {len(creators)} matching creators")
-        
         # Process each row in the CSV
         for row in csv_rows:
             try:
@@ -331,69 +314,43 @@ async def upload_conversions_data(
                 if acct_id in ['Acct ID', 'Acct Id', 'acct_id'] or conversions_str in ['Conversions', 'conversions']:
                     continue
                 
-                # Find creator by acct_id using efficient lookup
-                creator = creators_by_acct_id.get(acct_id)
+                # Find creator by acct_id
+                creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
                 if not creator:
-                    print(f"DEBUG: No creator found for acct_id: '{acct_id}'")
                     continue
-                print(f"DEBUG: Found creator: {creator.creator_id} with acct_id: '{creator.acct_id}'")
                 
                 # Parse conversions count
                 try:
                     conversions = int(conversions_str)
-                    print(f"DEBUG: Parsed conversions: {conversions}")
-                except ValueError as e:
-                    print(f"DEBUG: Error parsing conversions '{conversions_str}': {e}")
+                except ValueError:
                     continue
                 
-                # Create daterange string for PostgreSQL (inclusive of both dates)
-                period_range = f"[{start_date},{end_date}]"
-                print(f"DEBUG: Created period_range: {period_range}")
-                print(f"DEBUG: start_date type: {type(start_date)}, value: {start_date}")
-                print(f"DEBUG: end_date type: {type(end_date)}, value: {end_date}")
+                # Delete existing conversions for this creator/insertion
+                existing_conversions = db.query(Conversion).filter(
+                    Conversion.creator_id == creator.creator_id,
+                    Conversion.insertion_id == insertion_id
+                ).all()
                 
-                # Delete existing conversions for this creator/insertion combination
-                try:
-                    # Use SQLAlchemy ORM to delete existing conversions
-                    existing_conversions = db.query(Conversion).filter(
-                        Conversion.creator_id == creator.creator_id,
-                        Conversion.insertion_id == insertion_id
-                    ).all()
-                    
-                    # Delete all existing conversions for this creator/insertion
-                    for conv in existing_conversions:
-                        db.delete(conv)
-                    
-                    replaced_rows += len(existing_conversions)
-                    print(f"DEBUG: Deleted {len(existing_conversions)} existing conversions for creator {creator.creator_id}")
-                except Exception as e:
-                    print(f"DEBUG: Error deleting existing conversions: {e}")
-                    raise
+                for conv in existing_conversions:
+                    db.delete(conv)
+                replaced_rows += len(existing_conversions)
+                
+                # Create daterange for the period
+                period_range = f"[{start_date},{end_date}]"
                 
                 # Insert new conversion record
-                try:
-                    conversion = Conversion(
-                        conv_upload_id=conv_upload.conv_upload_id,
-                        insertion_id=insertion_id,
-                        creator_id=creator.creator_id,
-                        period=period_range,
-                        conversions=conversions
-                    )
-                    db.add(conversion)
-                    db.flush()  # Flush to catch constraint violations immediately
-                    inserted_rows += 1
-                    print(f"DEBUG: Created conversion for creator {creator.creator_id} with {conversions} conversions")
-                except Exception as e:
-                    print(f"DEBUG: Error creating conversion for creator {creator.creator_id}: {e}")
-                    print(f"DEBUG: Conversion details - conv_upload_id: {conv_upload.conv_upload_id}, insertion_id: {insertion_id}, period: {period_range}")
-                    raise
+                conversion = Conversion(
+                    conv_upload_id=conv_upload.conv_upload_id,
+                    insertion_id=insertion_id,
+                    creator_id=creator.creator_id,
+                    period=period_range,
+                    conversions=conversions
+                )
+                db.add(conversion)
+                inserted_rows += 1
                 
             except Exception as e:
-                # Log the error before skipping
-                print(f"DEBUG: Error processing row for acct_id {acct_id}: {e}")
-                print(f"DEBUG: Exception type: {type(e)}")
-                import traceback
-                print(f"DEBUG: Traceback: {traceback.format_exc()}")
+                # Skip rows that cause errors
                 continue
         
         # Commit all changes
