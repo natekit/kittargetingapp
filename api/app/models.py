@@ -12,6 +12,11 @@ class Advertiser(Base):
     advertiser_id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), unique=True, nullable=False, index=True)
     category = Column(String(100), nullable=True)
+    # New target demographic fields
+    target_age_range = Column(String(10), nullable=True)  # e.g., "25-34", "18-24"
+    target_gender_skew = Column(String(20), nullable=True)  # "mostly men", "mostly women", "even split"
+    target_location = Column(String(10), nullable=True)  # "US", "UK", "AU", "NZ"
+    target_interests = Column(Text, nullable=True)  # comma-separated list
 
 
 class Campaign(Base):
@@ -55,6 +60,11 @@ class Creator(Base):
     owner_email = Column(CITEXT, unique=True, nullable=False, index=True)
     topic = Column(Text, nullable=True)
     conservative_click_estimate = Column(Integer, nullable=True)
+    # New demographic fields
+    age_range = Column(String(10), nullable=True)  # e.g., "25-34", "18-24"
+    gender_skew = Column(String(20), nullable=True)  # "mostly men", "mostly women", "even split"
+    location = Column(String(10), nullable=True)  # "US", "UK", "AU", "NZ"
+    interests = Column(Text, nullable=True)  # comma-separated list
     created_at = Column(TIMESTAMP(timezone=True), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False)
     
@@ -62,6 +72,8 @@ class Creator(Base):
     placements = relationship("Placement", back_populates="creator")
     click_uniques = relationship("ClickUnique", back_populates="creator")
     conversions = relationship("Conversion", back_populates="creator")
+    creator_topics = relationship("CreatorTopic", back_populates="creator")
+    creator_keywords = relationship("CreatorKeyword", back_populates="creator")
 
 
 class Placement(Base):
@@ -174,4 +186,74 @@ class DeclinedCreator(Base):
 
 # Update relationships
 Advertiser.campaigns = relationship("Campaign", back_populates="advertiser")
+
+
+# New models for smart planner enhancements
+
+class Topic(Base):
+    __tablename__ = "topics"
+    
+    topic_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    
+    # Relationships
+    creator_topics = relationship("CreatorTopic", back_populates="topic")
+
+
+class Keyword(Base):
+    __tablename__ = "keywords"
+    
+    keyword_id = Column(Integer, primary_key=True, index=True)
+    keywords = Column(Text, nullable=False)  # comma-separated list
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    
+    # Relationships
+    creator_keywords = relationship("CreatorKeyword", back_populates="keyword")
+
+
+class CreatorTopic(Base):
+    __tablename__ = "creator_topics"
+    
+    creator_id = Column(Integer, ForeignKey("creators.creator_id"), nullable=False, primary_key=True)
+    topic_id = Column(Integer, ForeignKey("topics.topic_id"), nullable=False, primary_key=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    
+    # Relationships
+    creator = relationship("Creator", back_populates="creator_topics")
+    topic = relationship("Topic", back_populates="creator_topics")
+
+
+class CreatorKeyword(Base):
+    __tablename__ = "creator_keywords"
+    
+    creator_id = Column(Integer, ForeignKey("creators.creator_id"), nullable=False, primary_key=True)
+    keyword_id = Column(Integer, ForeignKey("keywords.keyword_id"), nullable=False, primary_key=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    
+    # Relationships
+    creator = relationship("Creator", back_populates="creator_keywords")
+    keyword = relationship("Keyword", back_populates="creator_keywords")
+
+
+class CreatorSimilarity(Base):
+    __tablename__ = "creator_similarities"
+    
+    creator_a_id = Column(Integer, ForeignKey("creators.creator_id"), nullable=False, primary_key=True)
+    creator_b_id = Column(Integer, ForeignKey("creators.creator_id"), nullable=False, primary_key=True)
+    similarity_type = Column(String(20), nullable=False, primary_key=True)  # 'topic', 'demographic', 'combined'
+    similarity_score = Column(Numeric(5, 4), nullable=False)  # 0.0000 to 1.0000
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    
+    # Relationships
+    creator_a = relationship("Creator", foreign_keys=[creator_a_id])
+    creator_b = relationship("Creator", foreign_keys=[creator_b_id])
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("creator_a_id != creator_b_id", name="check_different_creators"),
+        CheckConstraint("similarity_score >= 0 AND similarity_score <= 1", name="check_similarity_range"),
+    )
 
