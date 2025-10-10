@@ -348,6 +348,10 @@ async def upload_conversions_data(
                 replaced_rows += len(existing_conversions)
                 print(f"DEBUG: Row {row_index + 1} - Deleted {len(existing_conversions)} conversions")
                 
+                # Commit the deletions before inserting new ones
+                db.commit()
+                print(f"DEBUG: Row {row_index + 1} - Committed deletions")
+                
                 # Create daterange for the period
                 period_range = f"[{start_date},{end_date}]"
                 print(f"DEBUG: Row {row_index + 1} - Created period_range: {period_range}")
@@ -383,8 +387,7 @@ async def upload_conversions_data(
                 # Skip rows that cause errors
                 continue
         
-        # Commit all changes
-        db.commit()
+        # All changes are already committed per row
         
         return {
             "conv_upload_id": conv_upload.conv_upload_id,
