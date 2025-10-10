@@ -285,6 +285,12 @@ async def upload_conversions_data(
         db.add(conv_upload)
         db.flush()  # Get the ID without committing
         
+        # Debug: Show all creators in database
+        all_creators = db.query(Creator).all()
+        print(f"DEBUG: Found {len(all_creators)} creators in database:")
+        for c in all_creators:
+            print(f"  Creator ID: {c.creator_id}, acct_id: '{c.acct_id}'")
+        
         # Process each row in the CSV
         for row in csv_rows:
             try:
@@ -296,10 +302,17 @@ async def upload_conversions_data(
                 if not acct_id or not conversions_str:
                     continue
                 
+                # Skip header rows
+                if acct_id in ['Acct ID', 'Acct Id', 'acct_id'] or conversions_str in ['Conversions', 'conversions']:
+                    continue
+                
                 # Find creator by acct_id
+                print(f"DEBUG: Looking for creator with acct_id: '{acct_id}'")
                 creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
                 if not creator:
+                    print(f"DEBUG: No creator found for acct_id: '{acct_id}'")
                     continue
+                print(f"DEBUG: Found creator: {creator.creator_id} with acct_id: '{creator.acct_id}'")
                 
                 # Parse conversions count
                 try:
@@ -307,15 +320,15 @@ async def upload_conversions_data(
                 except ValueError:
                     continue
                 
-                # Create daterange for the period
-                period_range = DATERANGE(start_date, end_date, '[]')
+                # Create daterange for the period using PostgreSQL syntax
+                period_range = f"[{start_date},{end_date}]"
                 
                 # Delete existing conversions for this creator/insertion/period overlap
                 delete_query = text("""
                     DELETE FROM conversions 
                     WHERE creator_id = :creator_id 
                     AND insertion_id = :insertion_id 
-                    AND period && :period_range
+                    AND period && :period_range::daterange
                 """)
                 
                 result = db.execute(delete_query, {
