@@ -346,8 +346,8 @@ async def upload_conversions_data(
                     print(f"DEBUG: Error parsing conversions '{conversions_str}': {e}")
                     continue
                 
-                # Create daterange for the period using PostgreSQL DATERANGE (inclusive of both dates)
-                period_range = DATERANGE(start_date, end_date, '[]')
+                # Create daterange string for PostgreSQL (inclusive of both dates)
+                period_range = f"[{start_date},{end_date}]"
                 print(f"DEBUG: Created period_range: {period_range}")
                 print(f"DEBUG: start_date type: {type(start_date)}, value: {start_date}")
                 print(f"DEBUG: end_date type: {type(end_date)}, value: {end_date}")
