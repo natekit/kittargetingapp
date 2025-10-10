@@ -11,6 +11,7 @@ export function PlannerPage() {
   const [insertions, setInsertions] = useState<Insertion[]>([]);
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     category: '',
     advertiser_id: 0,
@@ -57,6 +58,7 @@ export function PlannerPage() {
     e.preventDefault();
     setLoading(true);
     setPlan(null);
+    setError(null);
 
     try {
       const requestData: any = {
@@ -86,12 +88,43 @@ export function PlannerPage() {
       }
 
       const data = await api.createPlan(requestData);
-      setPlan(data);
+      
+      // Check if plan has no creators
+      if (data.picked_creators.length === 0) {
+        setError(getNoResultsMessage(requestData));
+      } else {
+        setPlan(data);
+      }
     } catch (error) {
       console.error('Error creating plan:', error);
+      setError('Failed to create plan. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const getNoResultsMessage = (requestData: any): string => {
+    const hasTargetCpa = requestData.target_cpa && requestData.target_cpa > 0;
+    const hasAdvertiserCvr = requestData.advertiser_avg_cvr && requestData.advertiser_avg_cvr > 0;
+    
+    if (hasTargetCpa) {
+      return `No creators found that meet your target CPA of $${requestData.target_cpa}. Try:
+      • Increasing your target CPA to $${(requestData.target_cpa * 2).toFixed(2)} or higher
+      • Removing the target CPA constraint to see all available creators
+      • Adding a higher advertiser average CVR to improve creator estimates`;
+    }
+    
+    if (hasAdvertiserCvr) {
+      return `No creators found with sufficient performance data. This could be because:
+      • Creators don't have enough historical clicks or conversions
+      • The advertiser average CVR of ${(requestData.advertiser_avg_cvr * 100).toFixed(1)}% may be too low
+      • Try increasing the advertiser average CVR or removing it to use default estimates`;
+    }
+    
+    return `No creators found with sufficient performance data. This could be because:
+    • Creators don't have enough historical clicks or conversions
+    • No performance data has been uploaded for this advertiser/category
+    • Try uploading performance data first, or contact support for assistance`;
   };
 
   const exportToCsv = () => {
@@ -250,7 +283,9 @@ export function PlannerPage() {
                   placeholder="3.25"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Leave blank to prioritize by CVR instead of CPA
+                  Leave blank to prioritize by CVR instead of CPA. 
+                  <br />
+                  <span className="text-amber-600 font-medium">Tip:</span> If no results appear, try increasing this value or removing it entirely.
                 </p>
               </div>
 
@@ -271,6 +306,8 @@ export function PlannerPage() {
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Use your advertiser's average CVR for better fallback estimates (e.g., 0.025 = 2.5%)
+                  <br />
+                  <span className="text-amber-600 font-medium">Tip:</span> Higher values (0.05-0.15) may help more creators qualify for your plan.
                 </p>
               </div>
 
@@ -295,6 +332,28 @@ export function PlannerPage() {
           </form>
         </CardContent>
       </Card>
+
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="text-red-800">No Plan Generated</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-red-700 whitespace-pre-line">
+              {error}
+            </div>
+            <div className="mt-4">
+              <Button 
+                onClick={() => setError(null)} 
+                variant="outline" 
+                className="border-red-300 text-red-700 hover:bg-red-100"
+              >
+                Try Again
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {plan && (
         <Card>
