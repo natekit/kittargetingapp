@@ -285,76 +285,8 @@ async def upload_conversions_data(
         db.add(conv_upload)
         db.flush()  # Get the ID without committing
         
-        # FORCE INSERT - Just insert the data no matter what
-        print(f"DEBUG: CSV rows count: {len(csv_rows) if csv_rows else 0}")
-        if csv_rows:
-            print(f"DEBUG: First row: {csv_rows[0] if len(csv_rows) > 0 else 'None'}")
-            print(f"DEBUG: Second row: {csv_rows[1] if len(csv_rows) > 1 else 'None'}")
-        
-        if csv_rows and len(csv_rows) >= 1:
-            # Get the first row (data row) - handle both single row and header+data cases
-            row = csv_rows[0]  # Get first row
-            # Handle both original and standardized headers
-            acct_id = row.get('Acct ID', row.get('Acct Id', row.get('acct_id', ''))).strip()
-            conversions_str = row.get('Conversions', row.get('conversions', '')).strip()
-            
-            print(f"DEBUG: acct_id: '{acct_id}', conversions_str: '{conversions_str}'")
-            
-            # Skip if this looks like a header row
-            if acct_id and conversions_str and acct_id not in ['Acct ID', 'Acct Id', 'acct_id'] and conversions_str not in ['Conversions', 'conversions']:
-                print(f"DEBUG: Processing data - acct_id: {acct_id}, conversions_str: {conversions_str}")
-                
-                # Find or create creator
-                creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
-                print(f"DEBUG: Creator found: {creator is not None}")
-                if not creator:
-                    print(f"DEBUG: Creating new creator for acct_id: {acct_id}")
-                    creator = Creator(
-                        name=f"Creator {acct_id}",
-                        acct_id=acct_id,
-                        owner_email=f"creator{acct_id}@example.com",
-                        topic="Auto-created",
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow()
-                    )
-                    db.add(creator)
-                    db.flush()
-                    print(f"DEBUG: Creator created with ID: {creator.creator_id}")
-                else:
-                    print(f"DEBUG: Using existing creator with ID: {creator.creator_id}")
-                
-                # Parse conversions
-                try:
-                    conversions = int(conversions_str)
-                    print(f"DEBUG: Parsed conversions: {conversions}")
-                except ValueError as e:
-                    print(f"DEBUG: Error parsing conversions: {e}")
-                    raise
-                
-                # Create conversion
-                try:
-                    # Create daterange using PostgreSQL syntax
-                    period_range = f"[{start_date},{end_date}]"
-                    print(f"DEBUG: Created period_range: {period_range}")
-                    
-                    conversion = Conversion(
-                        conv_upload_id=conv_upload.conv_upload_id,
-                        insertion_id=insertion_id,
-                        creator_id=creator.creator_id,
-                        period=period_range,
-                        conversions=conversions
-                    )
-                    print(f"DEBUG: Created conversion object")
-                    db.add(conversion)
-                    print(f"DEBUG: Added conversion to database")
-                    inserted_rows = 1
-                    print(f"DEBUG: Set inserted_rows = 1")
-                except Exception as e:
-                    print(f"DEBUG: Error creating conversion: {e}")
-                    raise
-        
-        # Process each row in the CSV (old logic for multiple rows)
-        for row in csv_rows[2:] if len(csv_rows) > 2 else []:
+        # Process each row in the CSV
+        for row in csv_rows:
             try:
                 # Handle both original and standardized headers
                 acct_id = row.get('Acct ID', row.get('Acct Id', row.get('acct_id', ''))).strip()
