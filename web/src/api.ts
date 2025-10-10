@@ -162,10 +162,32 @@ class ApiClient {
     insertion_id?: number;
     cpc?: number;
     budget: number;
-    target_cpa: number;
+    target_cpa?: number;
     horizon_days: number;
+    advertiser_avg_cvr?: number;
   }): Promise<PlanResponse> {
     return this.request<PlanResponse>('/api/plan', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createSmartPlan(data: {
+    category?: string;
+    advertiser_id?: number;
+    insertion_id?: number;
+    cpc?: number;
+    budget: number;
+    target_cpa?: number;
+    horizon_days: number;
+    advertiser_avg_cvr?: number;
+    target_age_range?: string;
+    target_gender_skew?: string;
+    target_location?: string;
+    target_interests?: string;
+    use_smart_matching?: boolean;
+  }): Promise<PlanResponse> {
+    return this.request<PlanResponse>('/api/plan-smart', {
       method: 'POST',
       body: JSON.stringify(data),
     });

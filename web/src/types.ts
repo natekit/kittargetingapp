@@ -51,6 +51,14 @@ export interface PlanCreator {
   expected_spend: number;
   expected_conversions: number;
   value_ratio: number;
+  // Smart matching fields
+  matching_rationale?: string;
+  tier?: number;
+  performance_score?: number;
+  demographic_score?: number;
+  topic_score?: number;
+  similarity_score?: number;
+  combined_score?: number;
 }
 
 export interface PlanResponse {

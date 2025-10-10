@@ -21,6 +21,12 @@ export function PlannerPage() {
     target_cpa: '',
     advertiser_avg_cvr: '',
     horizon_days: 30,
+    // Smart matching fields
+    target_age_range: '',
+    target_gender_skew: '',
+    target_location: '',
+    target_interests: '',
+    use_smart_matching: true,
   });
 
   useEffect(() => {
@@ -87,7 +93,26 @@ export function PlannerPage() {
         requestData.cpc = parseFloat(formData.cpc);
       }
 
-      const data = await api.createPlan(requestData);
+      // Add smart matching fields if using smart matching
+      if (formData.use_smart_matching) {
+        if (formData.target_age_range) {
+          requestData.target_age_range = formData.target_age_range;
+        }
+        if (formData.target_gender_skew) {
+          requestData.target_gender_skew = formData.target_gender_skew;
+        }
+        if (formData.target_location) {
+          requestData.target_location = formData.target_location;
+        }
+        if (formData.target_interests) {
+          requestData.target_interests = formData.target_interests;
+        }
+        requestData.use_smart_matching = formData.use_smart_matching;
+      }
+
+      const data = formData.use_smart_matching 
+        ? await api.createSmartPlan(requestData)
+        : await api.createPlan(requestData);
       
       // Check if plan has no creators
       if (data.picked_creators.length === 0) {
@@ -326,6 +351,109 @@ export function PlannerPage() {
               </div>
             </div>
 
+            {/* Smart Matching Toggle */}
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="use_smart_matching"
+                  checked={formData.use_smart_matching}
+                  onChange={(e) => setFormData({ ...formData, use_smart_matching: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="use_smart_matching" className="text-sm font-medium text-gray-700">
+                  Use Smart Matching (Recommended)
+                </label>
+              </div>
+              <p className="text-xs text-gray-600 mt-1">
+                Smart matching uses demographics, topics, and similarity to find better creator matches and improve budget utilization.
+              </p>
+            </div>
+
+            {/* Target Demographics Section */}
+            {formData.use_smart_matching && (
+              <div className="mt-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Target Demographics (Optional)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="target_age_range" className="block text-sm font-medium text-gray-700">
+                      Target Age Range
+                    </label>
+                    <select
+                      id="target_age_range"
+                      value={formData.target_age_range}
+                      onChange={(e) => setFormData({ ...formData, target_age_range: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="">Select age range</option>
+                      <option value="18-24">18-24</option>
+                      <option value="25-34">25-34</option>
+                      <option value="35-44">35-44</option>
+                      <option value="45-54">45-54</option>
+                      <option value="55-64">55-64</option>
+                      <option value="25-44">25-44</option>
+                      <option value="25-54">25-54</option>
+                      <option value="35-54">35-54</option>
+                      <option value="35-64">35-64</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="target_gender_skew" className="block text-sm font-medium text-gray-700">
+                      Target Gender
+                    </label>
+                    <select
+                      id="target_gender_skew"
+                      value={formData.target_gender_skew}
+                      onChange={(e) => setFormData({ ...formData, target_gender_skew: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="">Select gender</option>
+                      <option value="mostly men">Mostly Men</option>
+                      <option value="mostly women">Mostly Women</option>
+                      <option value="even split">Even Split</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="target_location" className="block text-sm font-medium text-gray-700">
+                      Target Location
+                    </label>
+                    <select
+                      id="target_location"
+                      value={formData.target_location}
+                      onChange={(e) => setFormData({ ...formData, target_location: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="">Select location</option>
+                      <option value="US">United States</option>
+                      <option value="UK">United Kingdom</option>
+                      <option value="AU">Australia</option>
+                      <option value="NZ">New Zealand</option>
+                      <option value="CA">Canada</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="target_interests" className="block text-sm font-medium text-gray-700">
+                      Target Interests
+                    </label>
+                    <Input
+                      id="target_interests"
+                      type="text"
+                      value={formData.target_interests}
+                      onChange={(e) => setFormData({ ...formData, target_interests: e.target.value })}
+                      className="mt-1"
+                      placeholder="cooking, fitness, travel, technology"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Comma-separated list of interests (e.g., cooking, fitness, travel)
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <Button type="submit" disabled={loading}>
               {loading ? 'Creating Plan...' : 'Create Plan'}
             </Button>
@@ -412,6 +540,11 @@ export function PlannerPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Expected Conversions
                     </th>
+                    {formData.use_smart_matching && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Matching Rationale
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -436,11 +569,70 @@ export function PlannerPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {creator.expected_conversions.toFixed(0)}
                       </td>
+                      {formData.use_smart_matching && (
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          <div className="max-w-xs">
+                            <div className="text-xs text-gray-600 mb-1">
+                              {creator.matching_rationale || 'Historical performance data available'}
+                            </div>
+                            {creator.tier && (
+                              <div className="flex items-center space-x-2">
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  creator.tier === 1 ? 'bg-green-100 text-green-800' :
+                                  creator.tier === 2 ? 'bg-blue-100 text-blue-800' :
+                                  creator.tier === 3 ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-purple-100 text-purple-800'
+                                }`}>
+                                  Tier {creator.tier}
+                                </span>
+                                {creator.combined_score && (
+                                  <span className="text-xs text-gray-500">
+                                    Score: {(creator.combined_score * 100).toFixed(0)}%
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            
+            {/* Smart Matching Legend */}
+            {formData.use_smart_matching && (
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Matching Tier Legend</h4>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Tier 1
+                    </span>
+                    <span className="text-gray-600">Historical performance data</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Tier 2
+                    </span>
+                    <span className="text-gray-600">Topic/keyword matches to high performers</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                      Tier 3
+                    </span>
+                    <span className="text-gray-600">Demographic alignment with target audience</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      Tier 4
+                    </span>
+                    <span className="text-gray-600">Similar to high-performing creators</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
