@@ -300,45 +300,60 @@ async def upload_conversions_data(
         db.flush()  # Get the ID without committing
         
         # Process each row in the CSV
-        for row in csv_rows:
+        for row_index, row in enumerate(csv_rows):
+            print(f"DEBUG: Processing row {row_index + 1}")
             try:
                 # Handle both original and standardized headers
                 acct_id = row.get('Acct ID', row.get('Acct Id', row.get('acct_id', ''))).strip()
                 conversions_str = row.get('Conversions', row.get('conversions', '')).strip()
+                print(f"DEBUG: Row {row_index + 1} - acct_id: '{acct_id}', conversions: '{conversions_str}'")
                 
                 # Skip rows with missing required fields
                 if not acct_id or not conversions_str:
+                    print(f"DEBUG: Row {row_index + 1} - Skipping due to missing fields")
                     continue
                 
                 # Skip header rows
                 if acct_id in ['Acct ID', 'Acct Id', 'acct_id'] or conversions_str in ['Conversions', 'conversions']:
+                    print(f"DEBUG: Row {row_index + 1} - Skipping header row")
                     continue
                 
                 # Find creator by acct_id
+                print(f"DEBUG: Row {row_index + 1} - Looking for creator with acct_id: '{acct_id}'")
                 creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
                 if not creator:
+                    print(f"DEBUG: Row {row_index + 1} - No creator found for acct_id: '{acct_id}'")
                     continue
+                print(f"DEBUG: Row {row_index + 1} - Found creator: {creator.creator_id}")
                 
                 # Parse conversions count
                 try:
                     conversions = int(conversions_str)
-                except ValueError:
+                    print(f"DEBUG: Row {row_index + 1} - Parsed conversions: {conversions}")
+                except ValueError as e:
+                    print(f"DEBUG: Row {row_index + 1} - Error parsing conversions: {e}")
                     continue
                 
                 # Delete existing conversions for this creator/insertion
+                print(f"DEBUG: Row {row_index + 1} - Looking for existing conversions for creator {creator.creator_id}, insertion {insertion_id}")
                 existing_conversions = db.query(Conversion).filter(
                     Conversion.creator_id == creator.creator_id,
                     Conversion.insertion_id == insertion_id
                 ).all()
+                print(f"DEBUG: Row {row_index + 1} - Found {len(existing_conversions)} existing conversions")
                 
                 for conv in existing_conversions:
+                    print(f"DEBUG: Row {row_index + 1} - Deleting conversion {conv.conversion_id} with period {conv.period}")
                     db.delete(conv)
                 replaced_rows += len(existing_conversions)
+                print(f"DEBUG: Row {row_index + 1} - Deleted {len(existing_conversions)} conversions")
                 
                 # Create daterange for the period
                 period_range = f"[{start_date},{end_date}]"
+                print(f"DEBUG: Row {row_index + 1} - Created period_range: {period_range}")
                 
                 # Insert new conversion record
+                print(f"DEBUG: Row {row_index + 1} - Creating new conversion record")
                 conversion = Conversion(
                     conv_upload_id=conv_upload.conv_upload_id,
                     insertion_id=insertion_id,
@@ -347,9 +362,24 @@ async def upload_conversions_data(
                     conversions=conversions
                 )
                 db.add(conversion)
+                print(f"DEBUG: Row {row_index + 1} - Added conversion to session")
+                
+                # Flush to catch any immediate errors
+                try:
+                    db.flush()
+                    print(f"DEBUG: Row {row_index + 1} - Flush successful")
+                except Exception as flush_error:
+                    print(f"DEBUG: Row {row_index + 1} - Flush failed: {flush_error}")
+                    raise
+                
                 inserted_rows += 1
+                print(f"DEBUG: Row {row_index + 1} - Successfully processed, inserted_rows now: {inserted_rows}")
                 
             except Exception as e:
+                print(f"DEBUG: Row {row_index + 1} - ERROR: {e}")
+                print(f"DEBUG: Row {row_index + 1} - Exception type: {type(e)}")
+                import traceback
+                print(f"DEBUG: Row {row_index + 1} - Traceback: {traceback.format_exc()}")
                 # Skip rows that cause errors
                 continue
         
