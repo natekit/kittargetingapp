@@ -422,7 +422,7 @@ async def create_plan(
             
             historical_days = historical_days_query.scalar()
             if historical_days:
-                historical_days = max(1, historical_days.days)
+                historical_days = max(1, historical_days)
             else:
                 historical_days = 30  # Fallback to 30 days if no data
             
