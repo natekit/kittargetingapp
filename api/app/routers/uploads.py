@@ -115,6 +115,19 @@ async def upload_performance_data(
         db.add(perf_upload)
         db.flush()  # Get the ID without committing
         
+        # Delete existing performance data for this insertion to replace with new data
+        existing_click_uniques = db.query(ClickUnique).filter(
+            ClickUnique.perf_upload_id.in_(
+                db.query(PerfUpload.perf_upload_id).filter(PerfUpload.insertion_id == insertion_id)
+            )
+        ).all()
+        
+        replaced_rows = len(existing_click_uniques)
+        for click_unique in existing_click_uniques:
+            db.delete(click_unique)
+        
+        print(f"DEBUG: Deleted {replaced_rows} existing performance records for insertion {insertion_id}")
+        
         for row in csv_reader:
             try:
                 # Extract data from CSV row
@@ -212,6 +225,7 @@ async def upload_performance_data(
         return {
             "perf_upload_id": perf_upload.perf_upload_id,
             "inserted_rows": inserted_rows,
+            "replaced_rows": replaced_rows,
             "unmatched_count": unmatched_count,
             "unmatched_examples": unmatched_examples,
             "declined_count": declined_count
@@ -285,11 +299,22 @@ async def upload_conversions_data(
         db.add(conv_upload)
         db.flush()  # Get the ID without committing
         
-        # Debug: Show all creators in database
-        all_creators = db.query(Creator).all()
-        print(f"DEBUG: Found {len(all_creators)} creators in database:")
-        for c in all_creators:
-            print(f"  Creator ID: {c.creator_id}, acct_id: '{c.acct_id}'")
+        # Extract all acct_ids from CSV for efficient lookup
+        csv_acct_ids = []
+        for row in csv_rows:
+            acct_id = row.get('Acct ID', row.get('Acct Id', row.get('acct_id', ''))).strip()
+            if acct_id and acct_id not in ['Acct ID', 'Acct Id', 'acct_id']:
+                csv_acct_ids.append(acct_id)
+        
+        print(f"DEBUG: Looking for creators with acct_ids: {csv_acct_ids}")
+        
+        # Get all matching creators in one query
+        creators_by_acct_id = {}
+        if csv_acct_ids:
+            creators = db.query(Creator).filter(Creator.acct_id.in_(csv_acct_ids)).all()
+            for creator in creators:
+                creators_by_acct_id[creator.acct_id] = creator
+            print(f"DEBUG: Found {len(creators)} matching creators")
         
         # Process each row in the CSV
         for row in csv_rows:
@@ -306,9 +331,8 @@ async def upload_conversions_data(
                 if acct_id in ['Acct ID', 'Acct Id', 'acct_id'] or conversions_str in ['Conversions', 'conversions']:
                     continue
                 
-                # Find creator by acct_id
-                print(f"DEBUG: Looking for creator with acct_id: '{acct_id}'")
-                creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+                # Find creator by acct_id using efficient lookup
+                creator = creators_by_acct_id.get(acct_id)
                 if not creator:
                     print(f"DEBUG: No creator found for acct_id: '{acct_id}'")
                     continue
