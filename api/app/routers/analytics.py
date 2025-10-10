@@ -444,6 +444,9 @@ async def create_plan(
                 'expected_conversions': expected_conversions,
                 'value_ratio': value_ratio
             })
+        else:
+            print(f"DEBUG: Creator {creator_index + 1} - FAILED CPA filter (target: {plan_request.target_cpa}, expected: {expected_cpa}) - EXCLUDING")
+            continue
     
     # Sort by value ratio (descending) or CVR if no CPA target
     print(f"DEBUG: Sorting {len(creator_stats)} creator stats")
