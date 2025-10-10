@@ -389,7 +389,11 @@ async def upload_conversions_data(
                     raise
                 
             except Exception as e:
-                # Skip rows that cause errors
+                # Log the error before skipping
+                print(f"DEBUG: Error processing row for acct_id {acct_id}: {e}")
+                print(f"DEBUG: Exception type: {type(e)}")
+                import traceback
+                print(f"DEBUG: Traceback: {traceback.format_exc()}")
                 continue
         
         # Commit all changes
