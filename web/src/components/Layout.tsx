@@ -35,6 +35,12 @@ const UploadIcon = () => (
   </svg>
 );
 
+const AnalyticsIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  </svg>
+);
+
 const MenuIcon = () => (
   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -48,6 +54,7 @@ interface LayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard/leaderboard', icon: DashboardIcon },
   { name: 'Planner', href: '/planner', icon: PlannerIcon },
+  { name: 'Analytics', href: '/analytics/historical', icon: AnalyticsIcon },
   { name: 'Admin', href: '/admin', icon: AdminIcon },
   { name: 'Creators', href: '/admin/creators', icon: CreatorsIcon },
   { name: 'Performance', href: '/uploads/performance', icon: UploadIcon },

@@ -8,6 +8,7 @@ import { PerformanceUpload } from './pages/uploads/PerformanceUpload';
 import { ConversionsUpload } from './pages/uploads/ConversionsUpload';
 import { LeaderboardPage } from './pages/dashboard/LeaderboardPage';
 import { PlannerPage } from './pages/planner/PlannerPage';
+import { HistoricalDataPage } from './pages/analytics/HistoricalDataPage';
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ function App() {
             <Route path="/uploads/conversions" element={<ConversionsUpload />} />
             <Route path="/dashboard/leaderboard" element={<LeaderboardPage />} />
             <Route path="/planner" element={<PlannerPage />} />
+            <Route path="/analytics/historical" element={<HistoricalDataPage />} />
           </Routes>
         </Layout>
         <Toaster

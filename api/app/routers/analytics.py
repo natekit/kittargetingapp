@@ -677,3 +677,137 @@ async def create_smart_plan(
         import traceback
         print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Smart matching failed: {str(e)}")
+
+
+@router.get("/historical-data")
+async def get_historical_data(
+    advertiser_id: Optional[int] = Query(None, description="Advertiser ID"),
+    insertion_id: Optional[int] = Query(None, description="Insertion ID"),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Get historical performance data for an advertiser or insertion.
+    """
+    print(f"DEBUG: Historical data request - advertiser_id: {advertiser_id}, insertion_id: {insertion_id}")
+    
+    if not advertiser_id and not insertion_id:
+        raise HTTPException(status_code=400, detail="Either advertiser_id or insertion_id must be provided")
+    
+    try:
+        # Get creators for the advertiser/insertion
+        if insertion_id:
+            # Get creators for specific insertion
+            print(f"DEBUG: Getting creators for insertion_id: {insertion_id}")
+            creators_query = db.query(Creator).join(Placement).filter(Placement.insertion_id == insertion_id)
+        else:
+            # Get creators for advertiser
+            print(f"DEBUG: Getting creators for advertiser_id: {advertiser_id}")
+            creators_query = db.query(Creator).join(Placement).join(Insertion).filter(Insertion.advertiser_id == advertiser_id)
+        
+        creators = creators_query.all()
+        print(f"DEBUG: Found {len(creators)} creators")
+        
+        historical_data = []
+        
+        for creator in creators:
+            print(f"DEBUG: Processing creator {creator.creator_id}: {creator.name}")
+            
+            # Get click data
+            if insertion_id:
+                clicks_query = db.query(ClickUnique).filter(
+                    ClickUnique.creator_id == creator.creator_id,
+                    ClickUnique.insertion_id == insertion_id
+                )
+            else:
+                # Get clicks for all insertions of this advertiser
+                clicks_query = db.query(ClickUnique).join(PerfUpload).join(Insertion).filter(
+                    ClickUnique.creator_id == creator.creator_id,
+                    Insertion.advertiser_id == advertiser_id
+                )
+            
+            total_clicks = clicks_query.count()
+            print(f"DEBUG: Creator {creator.creator_id} - total clicks: {total_clicks}")
+            
+            # Get conversion data
+            if insertion_id:
+                conversions_query = db.query(Conversion).filter(
+                    Conversion.creator_id == creator.creator_id,
+                    Conversion.insertion_id == insertion_id
+                )
+            else:
+                # Get conversions for all insertions of this advertiser
+                conversions_query = db.query(Conversion).join(ConvUpload).join(Insertion).filter(
+                    Conversion.creator_id == creator.creator_id,
+                    Insertion.advertiser_id == advertiser_id
+                )
+            
+            total_conversions = conversions_query.count()
+            print(f"DEBUG: Creator {creator.creator_id} - total conversions: {total_conversions}")
+            
+            # Calculate CVR
+            cvr = total_conversions / total_clicks if total_clicks > 0 else 0
+            
+            # Get recent performance data
+            recent_clicks = clicks_query.order_by(ClickUnique.execution_date.desc()).limit(10).all()
+            recent_conversions = conversions_query.order_by(Conversion.period.desc()).limit(10).all()
+            
+            creator_data = {
+                'creator_id': creator.creator_id,
+                'name': creator.name,
+                'acct_id': creator.acct_id,
+                'topic': creator.topic,
+                'age_range': creator.age_range,
+                'gender_skew': creator.gender_skew,
+                'location': creator.location,
+                'interests': creator.interests,
+                'conservative_click_estimate': creator.conservative_click_estimate,
+                'total_clicks': total_clicks,
+                'total_conversions': total_conversions,
+                'cvr': cvr,
+                'recent_clicks': [
+                    {
+                        'execution_date': click.execution_date.isoformat() if click.execution_date else None,
+                        'clicks': click.clicks,
+                        'unique_clicks': click.unique_clicks,
+                        'flagged': click.flagged
+                    } for click in recent_clicks
+                ],
+                'recent_conversions': [
+                    {
+                        'period': str(conversion.period),
+                        'conversions': conversion.conversions
+                    } for conversion in recent_conversions
+                ]
+            }
+            
+            historical_data.append(creator_data)
+        
+        # Calculate summary statistics
+        total_creators = len(historical_data)
+        creators_with_clicks = len([c for c in historical_data if c['total_clicks'] > 0])
+        creators_with_conversions = len([c for c in historical_data if c['total_conversions'] > 0])
+        total_clicks = sum(c['total_clicks'] for c in historical_data)
+        total_conversions = sum(c['total_conversions'] for c in historical_data)
+        overall_cvr = total_conversions / total_clicks if total_clicks > 0 else 0
+        
+        summary = {
+            'total_creators': total_creators,
+            'creators_with_clicks': creators_with_clicks,
+            'creators_with_conversions': creators_with_conversions,
+            'total_clicks': total_clicks,
+            'total_conversions': total_conversions,
+            'overall_cvr': overall_cvr
+        }
+        
+        print(f"DEBUG: Summary - {summary}")
+        
+        return {
+            'summary': summary,
+            'creators': historical_data
+        }
+        
+    except Exception as e:
+        print(f"DEBUG: Historical data error: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error getting historical data: {str(e)}")

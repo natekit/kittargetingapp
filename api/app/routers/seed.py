@@ -4,11 +4,38 @@ from sqlalchemy import func
 import csv
 import io
 from typing import Dict, Any, List
-from app.models import Creator
+from app.models import Creator, Keyword, CreatorKeyword
 from app.db import get_db
 from datetime import datetime
 
 router = APIRouter()
+
+
+def process_keywords(db: Session, creator_id: int, keywords_str: str) -> None:
+    """Process and store keywords for a creator."""
+    if not keywords_str:
+        return
+    
+    # Split keywords by comma and clean them
+    keyword_list = [kw.strip().lower() for kw in keywords_str.split(',') if kw.strip()]
+    
+    # Remove existing keywords for this creator
+    db.query(CreatorKeyword).filter(CreatorKeyword.creator_id == creator_id).delete()
+    
+    for keyword_text in keyword_list:
+        # Find or create keyword
+        keyword = db.query(Keyword).filter(Keyword.keywords == keyword_text).first()
+        if not keyword:
+            keyword = Keyword(keywords=keyword_text)
+            db.add(keyword)
+            db.flush()  # Get the ID
+        
+        # Create creator-keyword relationship
+        creator_keyword = CreatorKeyword(
+            creator_id=creator_id,
+            keyword_id=keyword.keyword_id
+        )
+        db.add(creator_keyword)
 
 
 def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
@@ -39,6 +66,9 @@ def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
                 # Update conservative click estimate if provided
                 if creator_data['conservative_click_estimate'] is not None:
                     existing_creator.conservative_click_estimate = creator_data['conservative_click_estimate']
+                
+                # Process keywords
+                process_keywords(db, existing_creator.creator_id, creator_data['keywords'])
                 upserted += 1
             else:
                 # Create new creator
@@ -56,6 +86,10 @@ def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
                     updated_at=current_time
                 )
                 db.add(new_creator)
+                db.flush()  # Get the creator ID
+                
+                # Process keywords for new creator
+                process_keywords(db, new_creator.creator_id, creator_data['keywords'])
                 upserted += 1
         except Exception as e:
             print(f"DEBUG: Error processing creator {creator_data.get('acct_id', 'unknown')}: {e}")
@@ -110,6 +144,7 @@ async def seed_creators(
                 gender_skew = (row.get('gender_skew', '') or row.get('gender skew', '') or row.get('gender', '')).strip()
                 location = (row.get('location', '') or row.get('country', '') or row.get('region', '')).strip()
                 interests = (row.get('interests', '') or row.get('interest', '') or row.get('tags', '')).strip()
+                keywords = (row.get('keywords', '') or row.get('key_words', '') or row.get('key words', '')).strip()
                 
                 # Parse conservative click estimate with multiple header variations
                 conservative_click_estimate = None
@@ -128,7 +163,7 @@ async def seed_creators(
                             continue
                 
                 # Debug: Print extracted values
-                print(f"DEBUG: Extracted - owner_email: '{owner_email}', acct_id: '{acct_id}', name: '{name}', topic: '{topic}', age_range: '{age_range}', gender_skew: '{gender_skew}', location: '{location}', interests: '{interests}', conservative_click_estimate: {conservative_click_estimate}")
+                print(f"DEBUG: Extracted - owner_email: '{owner_email}', acct_id: '{acct_id}', name: '{name}', topic: '{topic}', age_range: '{age_range}', gender_skew: '{gender_skew}', location: '{location}', interests: '{interests}', keywords: '{keywords}', conservative_click_estimate: {conservative_click_estimate}")
                 
                 # Skip rows with missing required fields
                 if not owner_email or not acct_id:
@@ -146,6 +181,7 @@ async def seed_creators(
                     'gender_skew': gender_skew,
                     'location': location,
                     'interests': interests,
+                    'keywords': keywords,
                     'conservative_click_estimate': conservative_click_estimate
                 })
                 

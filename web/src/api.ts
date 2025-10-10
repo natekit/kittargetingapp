@@ -192,6 +192,14 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
+
+  async getHistoricalData(advertiser_id?: number, insertion_id?: number): Promise<HistoricalDataResponse> {
+    const params = new URLSearchParams();
+    if (advertiser_id) params.append('advertiser_id', advertiser_id.toString());
+    if (insertion_id) params.append('insertion_id', insertion_id.toString());
+    
+    return this.request<HistoricalDataResponse>(`/api/historical-data?${params}`);
+  }
 }
 
 export const api = new ApiClient(API_URL);
