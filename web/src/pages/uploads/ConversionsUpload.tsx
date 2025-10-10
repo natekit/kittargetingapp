@@ -101,7 +101,7 @@ export function ConversionsUpload() {
         
         // Validate structure for conversions data
         const validation = validateCSVStructure(parseResult.data, [
-          'Acct Id', 'Conversions'
+          'Acct ID', 'Conversions'
         ]);
         
         if (!validation.isValid) {
