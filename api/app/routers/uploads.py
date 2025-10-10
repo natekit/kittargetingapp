@@ -354,9 +354,9 @@ async def upload_conversions_data(
                 try:
                     delete_query = text("""
                         DELETE FROM conversions 
-                        WHERE creator_id = :creator_id 
-                        AND insertion_id = :insertion_id 
-                        AND period && :period_range::daterange
+                        WHERE creator_id = %(creator_id)s 
+                        AND insertion_id = %(insertion_id)s 
+                        AND period && %(period_range)s::daterange
                     """)
                     
                     result = db.execute(delete_query, {
