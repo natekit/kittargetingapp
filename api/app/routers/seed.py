@@ -28,6 +28,10 @@ def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
                 # Update existing creator
                 existing_creator.name = creator_data['name'] or existing_creator.name
                 existing_creator.topic = creator_data['topic'] or existing_creator.topic
+                existing_creator.age_range = creator_data['age_range'] or existing_creator.age_range
+                existing_creator.gender_skew = creator_data['gender_skew'] or existing_creator.gender_skew
+                existing_creator.location = creator_data['location'] or existing_creator.location
+                existing_creator.interests = creator_data['interests'] or existing_creator.interests
                 existing_creator.updated_at = current_time
                 # Update acct_id if it's different (in case we found by email)
                 if existing_creator.acct_id != creator_data['acct_id']:
@@ -43,6 +47,10 @@ def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
                     acct_id=creator_data['acct_id'],
                     owner_email=creator_data['owner_email'],
                     topic=creator_data['topic'],
+                    age_range=creator_data['age_range'],
+                    gender_skew=creator_data['gender_skew'],
+                    location=creator_data['location'],
+                    interests=creator_data['interests'],
                     conservative_click_estimate=creator_data['conservative_click_estimate'],
                     created_at=current_time,
                     updated_at=current_time
@@ -97,6 +105,12 @@ async def seed_creators(
                 name = (row.get('name', '') or row.get('creator_name', '') or row.get('creator name', '')).strip()
                 topic = (row.get('topic', '') or row.get('category', '') or row.get('niche', '')).strip()
                 
+                # Extract new demographic fields
+                age_range = (row.get('age_range', '') or row.get('age range', '') or row.get('age', '')).strip()
+                gender_skew = (row.get('gender_skew', '') or row.get('gender skew', '') or row.get('gender', '')).strip()
+                location = (row.get('location', '') or row.get('country', '') or row.get('region', '')).strip()
+                interests = (row.get('interests', '') or row.get('interest', '') or row.get('tags', '')).strip()
+                
                 # Parse conservative click estimate with multiple header variations
                 conservative_click_estimate = None
                 estimate_fields = [
@@ -114,7 +128,7 @@ async def seed_creators(
                             continue
                 
                 # Debug: Print extracted values
-                print(f"DEBUG: Extracted - owner_email: '{owner_email}', acct_id: '{acct_id}', name: '{name}', topic: '{topic}', conservative_click_estimate: {conservative_click_estimate}")
+                print(f"DEBUG: Extracted - owner_email: '{owner_email}', acct_id: '{acct_id}', name: '{name}', topic: '{topic}', age_range: '{age_range}', gender_skew: '{gender_skew}', location: '{location}', interests: '{interests}', conservative_click_estimate: {conservative_click_estimate}")
                 
                 # Skip rows with missing required fields
                 if not owner_email or not acct_id:
@@ -128,6 +142,10 @@ async def seed_creators(
                     'acct_id': acct_id,
                     'name': name,
                     'topic': topic,
+                    'age_range': age_range,
+                    'gender_skew': gender_skew,
+                    'location': location,
+                    'interests': interests,
                     'conservative_click_estimate': conservative_click_estimate
                 })
                 
