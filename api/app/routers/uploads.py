@@ -346,7 +346,7 @@ async def upload_conversions_data(
                     print(f"DEBUG: Error parsing conversions '{conversions_str}': {e}")
                     continue
                 
-                # Create daterange for the period using PostgreSQL DATERANGE
+                # Create daterange for the period using PostgreSQL DATERANGE (inclusive of both dates)
                 period_range = DATERANGE(start_date, end_date, '[]')
                 print(f"DEBUG: Created period_range: {period_range}")
                 print(f"DEBUG: start_date type: {type(start_date)}, value: {start_date}")
@@ -380,10 +380,12 @@ async def upload_conversions_data(
                         conversions=conversions
                     )
                     db.add(conversion)
+                    db.flush()  # Flush to catch constraint violations immediately
                     inserted_rows += 1
                     print(f"DEBUG: Created conversion for creator {creator.creator_id} with {conversions} conversions")
                 except Exception as e:
-                    print(f"DEBUG: Error creating conversion: {e}")
+                    print(f"DEBUG: Error creating conversion for creator {creator.creator_id}: {e}")
+                    print(f"DEBUG: Conversion details - conv_upload_id: {conv_upload.conv_upload_id}, insertion_id: {insertion_id}, period: {period_range}")
                     raise
                 
             except Exception as e:
