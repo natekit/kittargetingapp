@@ -6,6 +6,7 @@ import logging
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
 from app.models import Creator, ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion, ConvUpload, DeclinedCreator
+from app.smart_matching import SmartMatchingService
 from app.db import get_db
 
 router = APIRouter()
@@ -20,6 +21,12 @@ class PlanRequest(BaseModel):
     target_cpa: Optional[float] = None
     advertiser_avg_cvr: Optional[float] = None
     horizon_days: int
+    # New smart matching fields
+    target_age_range: Optional[str] = None
+    target_gender_skew: Optional[str] = None
+    target_location: Optional[str] = None
+    target_interests: Optional[str] = None
+    use_smart_matching: bool = True
 
 
 class CreatorStats(BaseModel):
@@ -503,3 +510,170 @@ async def create_plan(
         blended_cpa=blended_cpa,
         budget_utilization=budget_utilization
     )
+
+
+@router.post("/plan-smart", response_model=PlanResponse)
+async def create_smart_plan(
+    plan_request: PlanRequest,
+    db: Session = Depends(get_db)
+) -> PlanResponse:
+    """
+    Create a smart budget allocation plan using multi-tier creator selection.
+    """
+    print(f"DEBUG: Smart planner request received: {plan_request}")
+    
+    # Validate inputs (same as original)
+    if not plan_request.category and not plan_request.advertiser_id:
+        print("DEBUG: Validation failed - no category or advertiser_id provided")
+        raise HTTPException(status_code=400, detail="Either category or advertiser_id must be provided")
+    
+    if not plan_request.insertion_id and not plan_request.cpc:
+        print("DEBUG: Validation failed - no insertion_id or cpc provided")
+        raise HTTPException(status_code=400, detail="Either insertion_id or cpc must be provided")
+    
+    if plan_request.budget <= 0:
+        print(f"DEBUG: Validation failed - invalid budget: {plan_request.budget}")
+        raise HTTPException(status_code=400, detail="Budget must be greater than 0")
+    
+    if plan_request.target_cpa is not None and plan_request.target_cpa <= 0:
+        print(f"DEBUG: Validation failed - invalid target_cpa: {plan_request.target_cpa}")
+        raise HTTPException(status_code=400, detail="Target CPA must be greater than 0")
+    
+    if plan_request.horizon_days <= 0:
+        print(f"DEBUG: Validation failed - invalid horizon_days: {plan_request.horizon_days}")
+        raise HTTPException(status_code=400, detail="Horizon days must be greater than 0")
+    
+    if plan_request.advertiser_avg_cvr is not None and (plan_request.advertiser_avg_cvr <= 0 or plan_request.advertiser_avg_cvr >= 1):
+        print(f"DEBUG: Validation failed - invalid advertiser_avg_cvr: {plan_request.advertiser_avg_cvr}")
+        raise HTTPException(status_code=400, detail="Advertiser average CVR must be between 0 and 1")
+    
+    print("DEBUG: Input validation passed")
+    
+    # Get CPC from insertion if not provided
+    cpc = plan_request.cpc
+    if not cpc and plan_request.insertion_id:
+        print(f"DEBUG: Looking up CPC for insertion_id: {plan_request.insertion_id}")
+        insertion = db.query(Insertion).filter(Insertion.insertion_id == plan_request.insertion_id).first()
+        if not insertion:
+            print(f"DEBUG: Insertion not found for insertion_id: {plan_request.insertion_id}")
+            raise HTTPException(status_code=404, detail="Insertion not found")
+        cpc = float(insertion.cpc)
+        print(f"DEBUG: Found CPC from insertion: {cpc}")
+    else:
+        print(f"DEBUG: Using provided CPC: {cpc}")
+    
+    # Prepare target demographics
+    target_demographics = None
+    if plan_request.target_age_range or plan_request.target_gender_skew or plan_request.target_location or plan_request.target_interests:
+        target_demographics = {
+            'target_age_range': plan_request.target_age_range,
+            'target_gender_skew': plan_request.target_gender_skew,
+            'target_location': plan_request.target_location,
+            'target_interests': plan_request.target_interests
+        }
+        print(f"DEBUG: Using target demographics: {target_demographics}")
+    
+    # Use smart matching service
+    smart_service = SmartMatchingService(db)
+    
+    try:
+        print("DEBUG: Starting smart matching algorithm")
+        matched_creators = smart_service.find_smart_creators(
+            advertiser_id=plan_request.advertiser_id,
+            category=plan_request.category,
+            target_demographics=target_demographics,
+            budget=plan_request.budget,
+            cpc=cpc,
+            target_cpa=plan_request.target_cpa,
+            horizon_days=plan_request.horizon_days,
+            advertiser_avg_cvr=plan_request.advertiser_avg_cvr or 0.06
+        )
+        
+        print(f"DEBUG: Smart matching found {len(matched_creators)} creators")
+        
+        if not matched_creators:
+            print("DEBUG: No creators found - returning empty plan")
+            return PlanResponse(
+                picked_creators=[],
+                total_spend=0.0,
+                total_conversions=0.0,
+                blended_cpa=0.0,
+                budget_utilization=0.0
+            )
+        
+        # Convert to PlanCreator format and allocate budget
+        picked_creators = []
+        total_spend = 0.0
+        total_conversions = 0.0
+        
+        for creator_data in matched_creators:
+            creator = creator_data['creator']
+            performance_data = creator_data['performance_data']
+            
+            # Calculate expected metrics
+            expected_clicks = performance_data.get('expected_clicks', 100)
+            expected_spend = cpc * expected_clicks
+            expected_conversions = performance_data.get('expected_conversions', 10)
+            
+            # Check if we can fit this creator in budget
+            if total_spend + expected_spend <= plan_request.budget:
+                # Full allocation
+                picked_creators.append(PlanCreator(
+                    creator_id=creator.creator_id,
+                    name=creator.name,
+                    acct_id=creator.acct_id,
+                    expected_cvr=performance_data.get('expected_cvr', 0.06),
+                    expected_cpa=performance_data.get('expected_cpa', 10.0),
+                    clicks_per_day=expected_clicks / plan_request.horizon_days,
+                    expected_clicks=expected_clicks,
+                    expected_spend=expected_spend,
+                    expected_conversions=expected_conversions,
+                    value_ratio=creator_data['combined_score']
+                ))
+                total_spend += expected_spend
+                total_conversions += expected_conversions
+                print(f"DEBUG: Added creator {creator.name} - spend: ${expected_spend:.2f}, rationale: {creator_data['matching_rationale']}")
+            else:
+                # Pro-rate the last creator
+                remaining_budget = plan_request.budget - total_spend
+                if remaining_budget > 0:
+                    pro_ratio = remaining_budget / expected_spend
+                    pro_rated_clicks = expected_clicks * pro_ratio
+                    pro_rated_conversions = expected_conversions * pro_ratio
+                    
+                    picked_creators.append(PlanCreator(
+                        creator_id=creator.creator_id,
+                        name=creator.name,
+                        acct_id=creator.acct_id,
+                        expected_cvr=performance_data.get('expected_cvr', 0.06),
+                        expected_cpa=performance_data.get('expected_cpa', 10.0),
+                        clicks_per_day=pro_rated_clicks / plan_request.horizon_days,
+                        expected_clicks=pro_rated_clicks,
+                        expected_spend=remaining_budget,
+                        expected_conversions=pro_rated_conversions,
+                        value_ratio=creator_data['combined_score']
+                    ))
+                    total_spend += remaining_budget
+                    total_conversions += pro_rated_conversions
+                    print(f"DEBUG: Pro-rated creator {creator.name} - spend: ${remaining_budget:.2f}, rationale: {creator_data['matching_rationale']}")
+                break
+        
+        # Calculate final metrics
+        blended_cpa = total_spend / total_conversions if total_conversions > 0 else 0.0
+        budget_utilization = total_spend / plan_request.budget if plan_request.budget > 0 else 0.0
+        
+        print(f"DEBUG: Smart plan results - {len(picked_creators)} creators, ${total_spend:.2f} spend, {total_conversions:.2f} conversions, ${blended_cpa:.2f} CPA, {budget_utilization:.2%} utilization")
+        
+        return PlanResponse(
+            picked_creators=picked_creators,
+            total_spend=total_spend,
+            total_conversions=total_conversions,
+            blended_cpa=blended_cpa,
+            budget_utilization=budget_utilization
+        )
+        
+    except Exception as e:
+        print(f"DEBUG: Smart matching error: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Smart matching failed: {str(e)}")
