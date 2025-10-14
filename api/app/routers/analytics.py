@@ -833,3 +833,134 @@ async def get_historical_data(
         import traceback
         print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error getting historical data: {str(e)}")
+
+
+@router.get("/campaign-forecast")
+async def get_campaign_forecast(
+    campaign_id: int = Query(..., description="Campaign ID to forecast"),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Get campaign forecasting data for upcoming placements.
+    """
+    print(f"DEBUG: Campaign forecast request - campaign_id: {campaign_id}")
+    
+    try:
+        # Get the campaign
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        # Get all insertions for this campaign
+        insertions = db.query(Insertion).filter(Insertion.campaign_id == campaign_id).all()
+        print(f"DEBUG: Found {len(insertions)} insertions for campaign {campaign_id}")
+        
+        # Separate current/past vs future insertions
+        today = date.today()
+        current_past_insertions = [i for i in insertions if i.month_end < today]
+        future_insertions = [i for i in insertions if i.month_start > today]
+        
+        print(f"DEBUG: Current/past insertions: {len(current_past_insertions)}, Future insertions: {len(future_insertions)}")
+        
+        if not future_insertions:
+            return {
+                'campaign_id': campaign_id,
+                'campaign_name': campaign.name,
+                'forecast_data': [],
+                'total_forecasted_spend': 0.0,
+                'total_forecasted_clicks': 0,
+                'message': 'No future insertions found for this campaign'
+            }
+        
+        # Get all placements for future insertions
+        future_insertion_ids = [i.insertion_id for i in future_insertions]
+        placements = db.query(Placement).filter(Placement.insertion_id.in_(future_insertion_ids)).all()
+        print(f"DEBUG: Found {len(placements)} placements for future insertions")
+        
+        forecast_data = []
+        total_forecasted_spend = 0.0
+        total_forecasted_clicks = 0
+        
+        for placement in placements:
+            creator = placement.creator
+            insertion = placement.insertion
+            
+            print(f"DEBUG: Processing placement for creator {creator.creator_id} ({creator.name}) in insertion {insertion.insertion_id}")
+            
+            # Calculate forecasted clicks using the 3-tier logic
+            forecasted_clicks = 0
+            
+            # Tier 1: Check if creator has run this campaign this month
+            current_month_start = today.replace(day=1)
+            current_month_clicks = db.query(func.sum(ClickUnique.unique_clicks)).join(
+                PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+            ).join(
+                Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+            ).filter(
+                ClickUnique.creator_id == creator.creator_id,
+                Insertion.campaign_id == campaign_id,
+                ClickUnique.execution_date >= current_month_start
+            ).scalar() or 0
+            
+            if current_month_clicks > 0:
+                forecasted_clicks = current_month_clicks
+                print(f"DEBUG: Tier 1 - Using current month clicks: {forecasted_clicks}")
+            else:
+                # Tier 2: Check if creator has run other campaigns
+                other_campaigns_clicks = db.query(func.sum(ClickUnique.unique_clicks)).join(
+                    PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+                ).join(
+                    Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+                ).join(
+                    Campaign, Campaign.campaign_id == Insertion.campaign_id
+                ).filter(
+                    ClickUnique.creator_id == creator.creator_id,
+                    Campaign.campaign_id != campaign_id
+                ).scalar() or 0
+                
+                if other_campaigns_clicks > 0:
+                    forecasted_clicks = other_campaigns_clicks
+                    print(f"DEBUG: Tier 2 - Using other campaigns clicks: {forecasted_clicks}")
+                else:
+                    # Tier 3: Use conservative estimate
+                    forecasted_clicks = creator.conservative_click_estimate or 0
+                    print(f"DEBUG: Tier 3 - Using conservative estimate: {forecasted_clicks}")
+            
+            # Calculate forecasted spend
+            forecasted_spend = float(insertion.cpc) * forecasted_clicks
+            
+            forecast_entry = {
+                'placement_id': placement.placement_id,
+                'creator_id': creator.creator_id,
+                'creator_name': creator.name,
+                'creator_acct_id': creator.acct_id,
+                'insertion_id': insertion.insertion_id,
+                'insertion_month_start': insertion.month_start.isoformat(),
+                'insertion_month_end': insertion.month_end.isoformat(),
+                'cpc': float(insertion.cpc),
+                'forecasted_clicks': forecasted_clicks,
+                'forecasted_spend': forecasted_spend,
+                'forecast_method': 'current_month' if current_month_clicks > 0 else 'other_campaigns' if other_campaigns_clicks > 0 else 'conservative_estimate'
+            }
+            
+            forecast_data.append(forecast_entry)
+            total_forecasted_spend += forecasted_spend
+            total_forecasted_clicks += forecasted_clicks
+        
+        print(f"DEBUG: Forecast complete - {len(forecast_data)} placements, ${total_forecasted_spend:.2f} spend, {total_forecasted_clicks} clicks")
+        
+        return {
+            'campaign_id': campaign_id,
+            'campaign_name': campaign.name,
+            'forecast_data': forecast_data,
+            'total_forecasted_spend': total_forecasted_spend,
+            'total_forecasted_clicks': total_forecasted_clicks,
+            'future_insertions_count': len(future_insertions),
+            'placements_count': len(placements)
+        }
+        
+    except Exception as e:
+        print(f"DEBUG: Campaign forecast error: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error getting campaign forecast: {str(e)}")

@@ -127,3 +127,28 @@ export interface HistoricalDataResponse {
   summary: HistoricalDataSummary;
   creators: CreatorHistoricalData[];
 }
+
+export interface CampaignForecastData {
+  placement_id: number;
+  creator_id: number;
+  creator_name: string;
+  creator_acct_id: string;
+  insertion_id: number;
+  insertion_month_start: string;
+  insertion_month_end: string;
+  cpc: number;
+  forecasted_clicks: number;
+  forecasted_spend: number;
+  forecast_method: 'current_month' | 'other_campaigns' | 'conservative_estimate';
+}
+
+export interface CampaignForecastResponse {
+  campaign_id: number;
+  campaign_name: string;
+  forecast_data: CampaignForecastData[];
+  total_forecasted_spend: number;
+  total_forecasted_clicks: number;
+  future_insertions_count: number;
+  placements_count: number;
+  message?: string;
+}

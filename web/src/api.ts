@@ -8,7 +8,8 @@ import type {
   PerformanceUploadResponse,
   ConversionsUploadResponse,
   SyncResult,
-  HistoricalDataResponse
+  HistoricalDataResponse,
+  CampaignForecastResponse
 } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -200,6 +201,10 @@ class ApiClient {
     if (insertion_id) params.append('insertion_id', insertion_id.toString());
     
     return this.request<HistoricalDataResponse>(`/api/historical-data?${params}`);
+  }
+
+  async getCampaignForecast(campaign_id: number): Promise<CampaignForecastResponse> {
+    return this.request<CampaignForecastResponse>(`/api/campaign-forecast?campaign_id=${campaign_id}`);
   }
 }
 

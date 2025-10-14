@@ -9,6 +9,7 @@ import { ConversionsUpload } from './pages/uploads/ConversionsUpload';
 import { LeaderboardPage } from './pages/dashboard/LeaderboardPage';
 import { PlannerPage } from './pages/planner/PlannerPage';
 import { HistoricalDataPage } from './pages/analytics/HistoricalDataPage';
+import { CampaignForecastPage } from './pages/analytics/CampaignForecastPage';
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ function App() {
             <Route path="/dashboard/leaderboard" element={<LeaderboardPage />} />
             <Route path="/planner" element={<PlannerPage />} />
             <Route path="/analytics/historical" element={<HistoricalDataPage />} />
+            <Route path="/analytics/forecast" element={<CampaignForecastPage />} />
           </Routes>
         </Layout>
         <Toaster
