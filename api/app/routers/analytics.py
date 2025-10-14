@@ -789,7 +789,7 @@ async def get_historical_data(
                 'recent_clicks': [
                     {
                         'execution_date': click.execution_date.isoformat() if click.execution_date else None,
-                        'clicks': click.clicks,
+                        'clicks': click.raw_clicks or 0,
                         'unique_clicks': click.unique_clicks,
                         'flagged': click.flagged
                     } for click in recent_clicks
