@@ -7,7 +7,8 @@ import type {
   PlanResponse,
   PerformanceUploadResponse,
   ConversionsUploadResponse,
-  SyncResult
+  SyncResult,
+  HistoricalDataResponse
 } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -191,6 +192,14 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  async getHistoricalData(advertiser_id?: number, insertion_id?: number): Promise<HistoricalDataResponse> {
+    const params = new URLSearchParams();
+    if (advertiser_id) params.append('advertiser_id', advertiser_id.toString());
+    if (insertion_id) params.append('insertion_id', insertion_id.toString());
+    
+    return this.request<HistoricalDataResponse>(`/api/historical-data?${params}`);
   }
 }
 

@@ -88,3 +88,42 @@ export interface SyncResult {
   total_processed: number;
   errors?: string[];
 }
+
+export interface HistoricalDataSummary {
+  total_creators: number;
+  creators_with_clicks: number;
+  creators_with_conversions: number;
+  total_clicks: number;
+  total_conversions: number;
+  overall_cvr: number;
+}
+
+export interface CreatorHistoricalData {
+  creator_id: number;
+  name: string;
+  acct_id: string;
+  topic: string;
+  age_range: string;
+  gender_skew: string;
+  location: string;
+  interests: string;
+  conservative_click_estimate: number;
+  total_clicks: number;
+  total_conversions: number;
+  cvr: number;
+  recent_clicks: Array<{
+    execution_date: string;
+    clicks: number;
+    unique_clicks: number;
+    flagged: boolean;
+  }>;
+  recent_conversions: Array<{
+    period: string;
+    conversions: number;
+  }>;
+}
+
+export interface HistoricalDataResponse {
+  summary: HistoricalDataSummary;
+  creators: CreatorHistoricalData[];
+}

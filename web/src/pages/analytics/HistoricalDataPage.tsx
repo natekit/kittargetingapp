@@ -196,7 +196,7 @@ export function HistoricalDataPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {historicalData.creators.map((creator) => (
+                    {historicalData.creators.map((creator: any) => (
                       <tr key={creator.creator_id} className="hover:bg-gray-50">
                         {/* Creator Info */}
                         <td className="px-4 py-4">
@@ -262,7 +262,7 @@ export function HistoricalDataPage() {
                               <div>
                                 <div className="text-xs font-medium text-gray-700 mb-1">Recent Clicks</div>
                                 <div className="space-y-1">
-                                  {creator.recent_clicks.slice(0, 2).map((click, idx) => (
+                                  {creator.recent_clicks.slice(0, 2).map((click: any, idx: number) => (
                                     <div key={idx} className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
                                       {new Date(click.execution_date).toLocaleDateString()}: {click.unique_clicks} clicks
                                     </div>
@@ -274,7 +274,7 @@ export function HistoricalDataPage() {
                               <div>
                                 <div className="text-xs font-medium text-gray-700 mb-1">Recent Conversions</div>
                                 <div className="space-y-1">
-                                  {creator.recent_conversions.slice(0, 2).map((conv, idx) => (
+                                  {creator.recent_conversions.slice(0, 2).map((conv: any, idx: number) => (
                                     <div key={idx} className="text-xs text-gray-600 bg-green-50 px-2 py-1 rounded">
                                       {conv.period}: {conv.conversions} conversions
                                     </div>
