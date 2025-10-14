@@ -181,16 +181,16 @@ export function HistoricalDataPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
                         Creator
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
                         Demographics
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
                         Performance
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
                         Recent Activity
                       </th>
                     </tr>
@@ -198,48 +198,73 @@ export function HistoricalDataPage() {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {historicalData.creators.map((creator) => (
                       <tr key={creator.creator_id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{creator.name}</div>
-                          <div className="text-sm text-gray-500">ID: {creator.acct_id}</div>
-                          <div className="text-sm text-gray-500">Topic: {creator.topic || 'N/A'}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div>Age: {creator.age_range || 'N/A'}</div>
-                          <div>Gender: {creator.gender_skew || 'N/A'}</div>
-                          <div>Location: {creator.location || 'N/A'}</div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Interests: {creator.interests || 'N/A'}
+                        {/* Creator Info */}
+                        <td className="px-4 py-4">
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900 truncate" title={creator.name}>
+                              {creator.name}
+                            </div>
+                            <div className="text-xs text-gray-500">ID: {creator.acct_id}</div>
+                            <div className="text-xs text-gray-500">Topic: {creator.topic || 'N/A'}</div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <div className="text-xs text-gray-500">Total Clicks</div>
-                              <div className="font-medium">{creator.total_clicks}</div>
+                        
+                        {/* Demographics */}
+                        <td className="px-4 py-4">
+                          <div className="space-y-1">
+                            <div className="text-xs text-gray-900">
+                              <span className="font-medium">Age:</span> {creator.age_range || 'N/A'}
                             </div>
-                            <div>
-                              <div className="text-xs text-gray-500">Total Conversions</div>
-                              <div className="font-medium">{creator.total_conversions}</div>
+                            <div className="text-xs text-gray-900">
+                              <span className="font-medium">Gender:</span> {creator.gender_skew || 'N/A'}
                             </div>
-                            <div>
-                              <div className="text-xs text-gray-500">CVR</div>
-                              <div className="font-medium">{(creator.cvr * 100).toFixed(2)}%</div>
+                            <div className="text-xs text-gray-900">
+                              <span className="font-medium">Location:</span> {creator.location || 'N/A'}
                             </div>
-                            <div>
-                              <div className="text-xs text-gray-500">Conservative Estimate</div>
-                              <div className="font-medium">{creator.conservative_click_estimate || 'N/A'}</div>
-                            </div>
+                            {creator.interests && (
+                              <div className="text-xs text-gray-500 mt-1 truncate" title={creator.interests}>
+                                {creator.interests}
+                              </div>
+                            )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
+                        
+                        {/* Performance */}
+                        <td className="px-4 py-4">
                           <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-gray-500">Clicks:</span>
+                              <span className="text-sm font-medium">{creator.total_clicks.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-gray-500">Conversions:</span>
+                              <span className="text-sm font-medium">{creator.total_conversions.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-gray-500">CVR:</span>
+                              <span className="text-sm font-medium text-blue-600">
+                                {(creator.cvr * 100).toFixed(2)}%
+                              </span>
+                            </div>
+                            {creator.conservative_click_estimate && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs text-gray-500">Estimate:</span>
+                                <span className="text-sm font-medium">{creator.conservative_click_estimate}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        
+                        {/* Recent Activity */}
+                        <td className="px-4 py-4">
+                          <div className="space-y-3">
                             {creator.recent_clicks.length > 0 && (
                               <div>
-                                <div className="text-xs text-gray-500 font-medium">Recent Clicks</div>
-                                <div className="text-xs">
-                                  {creator.recent_clicks.slice(0, 3).map((click, idx) => (
-                                    <div key={idx}>
-                                      {click.execution_date}: {click.unique_clicks} clicks
+                                <div className="text-xs font-medium text-gray-700 mb-1">Recent Clicks</div>
+                                <div className="space-y-1">
+                                  {creator.recent_clicks.slice(0, 2).map((click, idx) => (
+                                    <div key={idx} className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                                      {new Date(click.execution_date).toLocaleDateString()}: {click.unique_clicks} clicks
                                     </div>
                                   ))}
                                 </div>
@@ -247,10 +272,10 @@ export function HistoricalDataPage() {
                             )}
                             {creator.recent_conversions.length > 0 && (
                               <div>
-                                <div className="text-xs text-gray-500 font-medium">Recent Conversions</div>
-                                <div className="text-xs">
-                                  {creator.recent_conversions.slice(0, 3).map((conv, idx) => (
-                                    <div key={idx}>
+                                <div className="text-xs font-medium text-gray-700 mb-1">Recent Conversions</div>
+                                <div className="space-y-1">
+                                  {creator.recent_conversions.slice(0, 2).map((conv, idx) => (
+                                    <div key={idx} className="text-xs text-gray-600 bg-green-50 px-2 py-1 rounded">
                                       {conv.period}: {conv.conversions} conversions
                                     </div>
                                   ))}
@@ -258,7 +283,7 @@ export function HistoricalDataPage() {
                               </div>
                             )}
                             {creator.recent_clicks.length === 0 && creator.recent_conversions.length === 0 && (
-                              <div className="text-xs text-gray-400">No recent activity</div>
+                              <div className="text-xs text-gray-400 italic">No recent activity</div>
                             )}
                           </div>
                         </td>
