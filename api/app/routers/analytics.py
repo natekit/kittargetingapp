@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 import logging
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
-from app.models import Creator, ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion, ConvUpload, DeclinedCreator
+from app.models import Creator, ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion, ConvUpload, DeclinedCreator, Placement
 from app.smart_matching import SmartMatchingService
 from app.db import get_db
 
@@ -702,9 +702,9 @@ async def get_historical_data(
         else:
             # Get creators for advertiser
             print(f"DEBUG: Getting creators for advertiser_id: {advertiser_id}")
-            creators_query = db.query(Creator).join(Placement).join(Insertion).filter(Insertion.advertiser_id == advertiser_id)
+            creators_query = db.query(Creator).join(Placement).join(Insertion).join(Campaign).filter(Campaign.advertiser_id == advertiser_id)
         
-        creators = creators_query.all()
+        creators = creators_query.distinct().all()
         print(f"DEBUG: Found {len(creators)} creators")
         
         historical_data = []
@@ -714,34 +714,34 @@ async def get_historical_data(
             
             # Get click data
             if insertion_id:
-                clicks_query = db.query(ClickUnique).filter(
+                clicks_query = db.query(ClickUnique).join(PerfUpload).filter(
                     ClickUnique.creator_id == creator.creator_id,
-                    ClickUnique.insertion_id == insertion_id
+                    PerfUpload.insertion_id == insertion_id
                 )
             else:
                 # Get clicks for all insertions of this advertiser
-                clicks_query = db.query(ClickUnique).join(PerfUpload).join(Insertion).filter(
+                clicks_query = db.query(ClickUnique).join(PerfUpload).join(Insertion).join(Campaign).filter(
                     ClickUnique.creator_id == creator.creator_id,
-                    Insertion.advertiser_id == advertiser_id
+                    Campaign.advertiser_id == advertiser_id
                 )
             
-            total_clicks = clicks_query.count()
+            total_clicks = db.query(func.sum(ClickUnique.unique_clicks)).select_from(clicks_query.subquery()).scalar() or 0
             print(f"DEBUG: Creator {creator.creator_id} - total clicks: {total_clicks}")
             
             # Get conversion data
             if insertion_id:
-                conversions_query = db.query(Conversion).filter(
+                conversions_query = db.query(Conversion).join(ConvUpload).filter(
                     Conversion.creator_id == creator.creator_id,
-                    Conversion.insertion_id == insertion_id
+                    ConvUpload.insertion_id == insertion_id
                 )
             else:
                 # Get conversions for all insertions of this advertiser
-                conversions_query = db.query(Conversion).join(ConvUpload).join(Insertion).filter(
+                conversions_query = db.query(Conversion).join(ConvUpload).filter(
                     Conversion.creator_id == creator.creator_id,
-                    Insertion.advertiser_id == advertiser_id
+                    ConvUpload.advertiser_id == advertiser_id
                 )
             
-            total_conversions = conversions_query.count()
+            total_conversions = db.query(func.sum(Conversion.conversions)).select_from(conversions_query.subquery()).scalar() or 0
             print(f"DEBUG: Creator {creator.creator_id} - total conversions: {total_conversions}")
             
             # Calculate CVR
@@ -761,9 +761,9 @@ async def get_historical_data(
                 'location': creator.location,
                 'interests': creator.interests,
                 'conservative_click_estimate': creator.conservative_click_estimate,
-                'total_clicks': total_clicks,
-                'total_conversions': total_conversions,
-                'cvr': cvr,
+                'total_clicks': int(total_clicks),
+                'total_conversions': int(total_conversions),
+                'cvr': float(cvr),
                 'recent_clicks': [
                     {
                         'execution_date': click.execution_date.isoformat() if click.execution_date else None,
