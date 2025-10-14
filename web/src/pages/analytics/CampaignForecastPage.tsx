@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
+import { CampaignForecastChart } from '../../components/CampaignForecastChart';
 import { api } from '../../api';
 import { Campaign, CampaignForecastResponse } from '../../types';
 
@@ -212,22 +213,13 @@ export function CampaignForecastPage() {
             </CardContent>
           </Card>
 
-          {/* Chart Placeholder */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Forecast Visualization</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-gray-500 text-lg">Chart visualization coming soon</div>
-                  <div className="text-gray-400 text-sm mt-2">
-                    This will show forecasted performance over time
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Forecast Chart */}
+          <CampaignForecastChart
+            forecastData={forecastData.forecast_data}
+            campaignName={forecastData.campaign_name}
+            totalForecastedSpend={forecastData.total_forecasted_spend}
+            totalForecastedClicks={forecastData.total_forecasted_clicks}
+          />
         </>
       )}
     </div>
