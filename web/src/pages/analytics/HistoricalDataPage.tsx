@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
 import { api } from '../../api';
-import { Advertiser, Insertion, HistoricalDataResponse, CreatorHistoricalData } from '../../types';
+import { Advertiser, Insertion, HistoricalDataResponse } from '../../types';
 
 export function HistoricalDataPage() {
   const [advertisers, setAdvertisers] = useState<Advertiser[]>([]);
@@ -110,7 +109,7 @@ export function HistoricalDataPage() {
                   <option value={0}>All insertions</option>
                   {insertions.map((insertion) => (
                     <option key={insertion.insertion_id} value={insertion.insertion_id}>
-                      {insertion.name}
+                      Insertion {insertion.insertion_id} (${insertion.cpc} CPC)
                     </option>
                   ))}
                 </select>
