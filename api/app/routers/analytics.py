@@ -696,16 +696,38 @@ async def get_historical_data(
     try:
         # Get creators for the advertiser/insertion
         if insertion_id:
-            # Get creators for specific insertion
+            # Get creators for specific insertion - try multiple approaches
             print(f"DEBUG: Getting creators for insertion_id: {insertion_id}")
-            creators_query = db.query(Creator).join(Placement).filter(Placement.insertion_id == insertion_id)
+            
+            # First try through placements
+            creators_from_placements = db.query(Creator).join(Placement).filter(Placement.insertion_id == insertion_id).distinct().all()
+            print(f"DEBUG: Found {len(creators_from_placements)} creators through placements")
+            
+            # Also try through conversions (direct relationship)
+            creators_from_conversions = db.query(Creator).join(Conversion).filter(Conversion.insertion_id == insertion_id).distinct().all()
+            print(f"DEBUG: Found {len(creators_from_conversions)} creators through conversions")
+            
+            # Also try through clicks (through perf_uploads)
+            creators_from_clicks = db.query(Creator).join(ClickUnique).join(PerfUpload).filter(PerfUpload.insertion_id == insertion_id).distinct().all()
+            print(f"DEBUG: Found {len(creators_from_clicks)} creators through clicks")
+            
+            # Combine all unique creators
+            all_creator_ids = set()
+            all_creators = []
+            
+            for creator in creators_from_placements + creators_from_conversions + creators_from_clicks:
+                if creator.creator_id not in all_creator_ids:
+                    all_creator_ids.add(creator.creator_id)
+                    all_creators.append(creator)
+            
+            creators = all_creators
+            print(f"DEBUG: Total unique creators found: {len(creators)}")
         else:
             # Get creators for advertiser
             print(f"DEBUG: Getting creators for advertiser_id: {advertiser_id}")
             creators_query = db.query(Creator).join(Placement).join(Insertion).join(Campaign).filter(Campaign.advertiser_id == advertiser_id)
-        
-        creators = creators_query.distinct().all()
-        print(f"DEBUG: Found {len(creators)} creators")
+            creators = creators_query.distinct().all()
+            print(f"DEBUG: Found {len(creators)} creators")
         
         historical_data = []
         
