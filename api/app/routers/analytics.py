@@ -855,22 +855,44 @@ async def get_campaign_forecast(
         insertions = db.query(Insertion).filter(Insertion.campaign_id == campaign_id).all()
         print(f"DEBUG: Found {len(insertions)} insertions for campaign {campaign_id}")
         
+        # Debug: Print all insertion details
+        for insertion in insertions:
+            print(f"DEBUG: Insertion {insertion.insertion_id} - Start: {insertion.month_start}, End: {insertion.month_end}, CPC: {insertion.cpc}")
+        
         # Separate current/past vs future insertions
         today = date.today()
+        print(f"DEBUG: Today's date: {today}")
+        
         current_past_insertions = [i for i in insertions if i.month_end < today]
         future_insertions = [i for i in insertions if i.month_start > today]
         
         print(f"DEBUG: Current/past insertions: {len(current_past_insertions)}, Future insertions: {len(future_insertions)}")
         
+        # Debug: Show which insertions are current/past vs future
+        for insertion in current_past_insertions:
+            print(f"DEBUG: Current/Past - Insertion {insertion.insertion_id} ends {insertion.month_end}")
+        for insertion in future_insertions:
+            print(f"DEBUG: Future - Insertion {insertion.insertion_id} starts {insertion.month_start}")
+        
+        # If no future insertions, check if there are current month insertions
         if not future_insertions:
-            return {
-                'campaign_id': campaign_id,
-                'campaign_name': campaign.name,
-                'forecast_data': [],
-                'total_forecasted_spend': 0.0,
-                'total_forecasted_clicks': 0,
-                'message': 'No future insertions found for this campaign'
-            }
+            current_month_start = today.replace(day=1)
+            current_month_insertions = [i for i in insertions if i.month_start <= today and i.month_end >= current_month_start]
+            print(f"DEBUG: No future insertions, checking current month: {len(current_month_insertions)} found")
+            
+            if not current_month_insertions:
+                return {
+                    'campaign_id': campaign_id,
+                    'campaign_name': campaign.name,
+                    'forecast_data': [],
+                    'total_forecasted_spend': 0.0,
+                    'total_forecasted_clicks': 0,
+                    'message': 'No future or current month insertions found for this campaign'
+                }
+            else:
+                # Use current month insertions for forecasting
+                future_insertions = current_month_insertions
+                print(f"DEBUG: Using current month insertions for forecasting: {len(future_insertions)}")
         
         # Get all placements for future insertions
         future_insertion_ids = [i.insertion_id for i in future_insertions]
