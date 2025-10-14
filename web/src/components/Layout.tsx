@@ -48,6 +48,7 @@ interface LayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard/leaderboard', icon: DashboardIcon },
   { name: 'Planner', href: '/planner', icon: PlannerIcon },
+  { name: 'Analytics', href: '/analytics/historical', icon: AnalyticsIcon },
   { name: 'Admin', href: '/admin', icon: AdminIcon },
   { name: 'Creators', href: '/admin/creators', icon: CreatorsIcon },
   { name: 'Performance', href: '/uploads/performance', icon: UploadIcon },
