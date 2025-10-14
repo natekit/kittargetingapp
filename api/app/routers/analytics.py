@@ -894,10 +894,56 @@ async def get_campaign_forecast(
                 future_insertions = current_month_insertions
                 print(f"DEBUG: Using current month insertions for forecasting: {len(future_insertions)}")
         
-        # Get all placements for future insertions
+        # Get creators for future insertions through multiple paths
         future_insertion_ids = [i.insertion_id for i in future_insertions]
+        print(f"DEBUG: Looking for creators for insertions: {future_insertion_ids}")
+        
+        # Try to get creators through placements first
         placements = db.query(Placement).filter(Placement.insertion_id.in_(future_insertion_ids)).all()
         print(f"DEBUG: Found {len(placements)} placements for future insertions")
+        
+        # If no placements, try to get creators through performance data
+        if not placements:
+            print("DEBUG: No placements found, looking for creators through performance data")
+            
+            # Get creators through clicks (ClickUnique → PerfUpload → Insertion)
+            creators_from_clicks = db.query(Creator).join(ClickUnique).join(PerfUpload).filter(
+                PerfUpload.insertion_id.in_(future_insertion_ids)
+            ).distinct().all()
+            print(f"DEBUG: Found {len(creators_from_clicks)} creators through performance data")
+            
+            # Get creators through conversions
+            creators_from_conversions = db.query(Creator).join(Conversion).filter(
+                Conversion.insertion_id.in_(future_insertion_ids)
+            ).distinct().all()
+            print(f"DEBUG: Found {len(creators_from_conversions)} creators through conversions")
+            
+            # Combine all unique creators
+            all_creator_ids = set()
+            all_creators = []
+            
+            for creator in creators_from_clicks + creators_from_conversions:
+                if creator.creator_id not in all_creator_ids:
+                    all_creator_ids.add(creator.creator_id)
+                    all_creators.append(creator)
+            
+            print(f"DEBUG: Total unique creators found: {len(all_creators)}")
+            
+            # Create virtual placements for forecasting
+            placements = []
+            for creator in all_creators:
+                # Find the insertion for this creator
+                insertion = next((i for i in future_insertions if i.insertion_id in future_insertion_ids), None)
+                if insertion:
+                    # Create a virtual placement object
+                    virtual_placement = type('VirtualPlacement', (), {
+                        'placement_id': f"virtual_{creator.creator_id}_{insertion.insertion_id}",
+                        'creator': creator,
+                        'insertion': insertion
+                    })()
+                    placements.append(virtual_placement)
+            
+            print(f"DEBUG: Created {len(placements)} virtual placements for forecasting")
         
         forecast_data = []
         total_forecasted_spend = 0.0
