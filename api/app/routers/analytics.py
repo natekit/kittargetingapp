@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, case, and_, or_
+from sqlalchemy import func, text, case, and_, or_, desc
 from typing import Dict, Any, List, Optional
 import logging
 from pydantic import BaseModel
@@ -185,8 +185,8 @@ async def get_leaderboard(
         # Sort by expected CPA (ascending - lower is better)
         main_query = main_query.order_by('expected_cpa')
     else:
-        # Sort by CVR descending
-        main_query = main_query.order_by('cvr')
+        # Sort by CVR descending (highest CVR first)
+        main_query = main_query.order_by(desc('cvr'))
     
     # Apply limit
     results = main_query.limit(limit).all()
