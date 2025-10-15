@@ -27,6 +27,9 @@ class PlanRequest(BaseModel):
     target_location: Optional[str] = None
     target_interests: Optional[str] = None
     use_smart_matching: bool = True
+    # Creator filtering fields
+    include_acct_ids: Optional[str] = None  # Comma-separated list of Acct IDs to include
+    exclude_acct_ids: Optional[str] = None  # Comma-separated list of Acct IDs to exclude
 
 
 class CreatorStats(BaseModel):
@@ -292,6 +295,44 @@ async def create_plan(
     creators = creators_query.distinct().all()
     print(f"DEBUG: Found {len(creators)} creators for planning")
     logging.info(f"Found {len(creators)} creators for planning")
+    
+    # Apply creator filtering based on Acct IDs
+    if plan_request.include_acct_ids or plan_request.exclude_acct_ids:
+        print("DEBUG: Applying creator filtering")
+        
+        # Parse include Acct IDs
+        include_acct_ids = set()
+        if plan_request.include_acct_ids:
+            include_acct_ids = {acct_id.strip() for acct_id in plan_request.include_acct_ids.split(',') if acct_id.strip()}
+            print(f"DEBUG: Include Acct IDs: {include_acct_ids}")
+        
+        # Parse exclude Acct IDs
+        exclude_acct_ids = set()
+        if plan_request.exclude_acct_ids:
+            exclude_acct_ids = {acct_id.strip() for acct_id in plan_request.exclude_acct_ids.split(',') if acct_id.strip()}
+            print(f"DEBUG: Exclude Acct IDs: {exclude_acct_ids}")
+        
+        # Filter creators
+        filtered_creators = []
+        for creator in creators:
+            creator_acct_id = creator.acct_id.strip()
+            
+            # If include list is specified, only include creators in that list
+            if include_acct_ids and creator_acct_id not in include_acct_ids:
+                print(f"DEBUG: Excluding creator {creator.name} (Acct ID: {creator_acct_id}) - not in include list")
+                continue
+            
+            # If exclude list is specified, exclude creators in that list
+            if exclude_acct_ids and creator_acct_id in exclude_acct_ids:
+                print(f"DEBUG: Excluding creator {creator.name} (Acct ID: {creator_acct_id}) - in exclude list")
+                continue
+            
+            filtered_creators.append(creator)
+            print(f"DEBUG: Including creator {creator.name} (Acct ID: {creator_acct_id})")
+        
+        creators = filtered_creators
+        print(f"DEBUG: After filtering: {len(creators)} creators remaining")
+        logging.info(f"After creator filtering: {len(creators)} creators remaining")
     
     # Filter out declined creators for this advertiser
     if plan_request.advertiser_id:
@@ -586,7 +627,9 @@ async def create_smart_plan(
             cpc=cpc,
             target_cpa=plan_request.target_cpa,
             horizon_days=plan_request.horizon_days,
-            advertiser_avg_cvr=plan_request.advertiser_avg_cvr or 0.06
+            advertiser_avg_cvr=plan_request.advertiser_avg_cvr or 0.06,
+            include_acct_ids=plan_request.include_acct_ids,
+            exclude_acct_ids=plan_request.exclude_acct_ids
         )
         
         print(f"DEBUG: Smart matching found {len(matched_creators)} creators")

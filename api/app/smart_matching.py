@@ -33,7 +33,9 @@ class SmartMatchingService:
         cpc: float = 0.0,
         target_cpa: Optional[float] = None,
         horizon_days: int = 30,
-        advertiser_avg_cvr: float = 0.06
+        advertiser_avg_cvr: float = 0.06,
+        include_acct_ids: Optional[str] = None,
+        exclude_acct_ids: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Find creators using smart matching algorithm.
@@ -47,6 +49,43 @@ class SmartMatchingService:
         creators_query = self._get_base_creators_query(advertiser_id, category)
         all_creators = creators_query.distinct().all()
         logger.info(f"Found {len(all_creators)} total creators")
+        
+        # Apply creator filtering based on Acct IDs
+        if include_acct_ids or exclude_acct_ids:
+            logger.info("Applying creator filtering")
+            
+            # Parse include Acct IDs
+            include_acct_ids_set = set()
+            if include_acct_ids:
+                include_acct_ids_set = {acct_id.strip() for acct_id in include_acct_ids.split(',') if acct_id.strip()}
+                logger.info(f"Include Acct IDs: {include_acct_ids_set}")
+            
+            # Parse exclude Acct IDs
+            exclude_acct_ids_set = set()
+            if exclude_acct_ids:
+                exclude_acct_ids_set = {acct_id.strip() for acct_id in exclude_acct_ids.split(',') if acct_id.strip()}
+                logger.info(f"Exclude Acct IDs: {exclude_acct_ids_set}")
+            
+            # Filter creators
+            filtered_creators = []
+            for creator in all_creators:
+                creator_acct_id = creator.acct_id.strip()
+                
+                # If include list is specified, only include creators in that list
+                if include_acct_ids_set and creator_acct_id not in include_acct_ids_set:
+                    logger.debug(f"Excluding creator {creator.name} (Acct ID: {creator_acct_id}) - not in include list")
+                    continue
+                
+                # If exclude list is specified, exclude creators in that list
+                if exclude_acct_ids_set and creator_acct_id in exclude_acct_ids_set:
+                    logger.debug(f"Excluding creator {creator.name} (Acct ID: {creator_acct_id}) - in exclude list")
+                    continue
+                
+                filtered_creators.append(creator)
+                logger.debug(f"Including creator {creator.name} (Acct ID: {creator_acct_id})")
+            
+            all_creators = filtered_creators
+            logger.info(f"After filtering: {len(all_creators)} creators remaining")
         
         # Get advertiser target demographics if not provided
         if not target_demographics and advertiser_id:
