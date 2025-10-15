@@ -997,31 +997,51 @@ async def get_campaign_forecast(
             # Calculate forecasted spend
             forecasted_spend = float(insertion.cpc) * forecasted_clicks
             
-            # Create separate entries for each date in the insertion period
-            # This gives us a timeline view of when spend will occur
-            insertion_start = insertion.month_start
-            insertion_end = insertion.month_end
+            # Get execution dates for this creator and insertion from performance data
+            # This tells us when the insertion will actually run
+            execution_dates = db.query(ClickUnique.execution_date).join(
+                PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+            ).filter(
+                ClickUnique.creator_id == creator.creator_id,
+                PerfUpload.insertion_id == insertion.insertion_id,
+                ClickUnique.execution_date > today  # Only future execution dates
+            ).distinct().all()
             
-            # Create entries for each month in the insertion period
-            current_date = insertion_start
-            while current_date <= insertion_end:
-                # Calculate the end of the current month
-                if current_date.month == 12:
-                    next_month = current_date.replace(year=current_date.year + 1, month=1, day=1)
-                else:
-                    next_month = current_date.replace(month=current_date.month + 1, day=1)
+            print(f"DEBUG: Found {len(execution_dates)} future execution dates for creator {creator.creator_id} in insertion {insertion.insertion_id}")
+            
+            if execution_dates:
+                # Create forecast entries for each execution date
+                for execution_date_tuple in execution_dates:
+                    execution_date = execution_date_tuple[0]
+                    
+                    forecast_entry = {
+                        'placement_id': f"{placement.placement_id}_{execution_date.strftime('%Y-%m-%d')}",
+                        'creator_id': creator.creator_id,
+                        'creator_name': creator.name,
+                        'creator_acct_id': creator.acct_id,
+                        'insertion_id': insertion.insertion_id,
+                        'execution_date': execution_date.isoformat(),
+                        'cpc': float(insertion.cpc),
+                        'forecasted_clicks': forecasted_clicks,
+                        'forecasted_spend': forecasted_spend,
+                        'forecast_method': 'current_month' if current_month_clicks > 0 else 'other_campaigns' if other_campaigns_clicks > 0 else 'conservative_estimate'
+                    }
+                    
+                    forecast_data.append(forecast_entry)
+                    total_forecasted_spend += forecasted_spend
+                    total_forecasted_clicks += forecasted_clicks
+            else:
+                # If no execution dates found, use insertion period as fallback
+                print(f"DEBUG: No execution dates found for creator {creator.creator_id}, using insertion period")
                 
-                month_end = min(next_month - timedelta(days=1), insertion_end)
-                
-                # Create forecast entry for this month
+                # Create a single entry using insertion period
                 forecast_entry = {
-                    'placement_id': f"{placement.placement_id}_{current_date.strftime('%Y-%m')}",
+                    'placement_id': f"{placement.placement_id}_fallback",
                     'creator_id': creator.creator_id,
                     'creator_name': creator.name,
                     'creator_acct_id': creator.acct_id,
                     'insertion_id': insertion.insertion_id,
-                    'insertion_month_start': current_date.isoformat(),
-                    'insertion_month_end': month_end.isoformat(),
+                    'execution_date': insertion.month_start.isoformat(),  # Use insertion start as fallback
                     'cpc': float(insertion.cpc),
                     'forecasted_clicks': forecasted_clicks,
                     'forecasted_spend': forecasted_spend,
@@ -1031,9 +1051,6 @@ async def get_campaign_forecast(
                 forecast_data.append(forecast_entry)
                 total_forecasted_spend += forecasted_spend
                 total_forecasted_clicks += forecasted_clicks
-                
-                # Move to next month
-                current_date = next_month
         
         print(f"DEBUG: Forecast complete - {len(forecast_data)} placements, ${total_forecasted_spend:.2f} spend, {total_forecasted_clicks} clicks")
         

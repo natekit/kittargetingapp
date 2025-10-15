@@ -161,7 +161,7 @@ export function CampaignForecastPage() {
                         Creator
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Forecast Period
+                        Execution Date
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         CPC
@@ -188,13 +188,14 @@ export function CampaignForecastPage() {
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-900">
                           <div className="font-medium">
-                            {new Date(placement.insertion_month_start).toLocaleDateString('en-US', { 
+                            {new Date(placement.execution_date).toLocaleDateString('en-US', { 
                               month: 'short', 
+                              day: 'numeric',
                               year: 'numeric' 
                             })}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {new Date(placement.insertion_month_start).toLocaleDateString()} - {new Date(placement.insertion_month_end).toLocaleDateString()}
+                            {new Date(placement.execution_date).toLocaleDateString()}
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-900">

@@ -38,55 +38,65 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
   totalForecastedSpend,
   totalForecastedClicks,
 }) => {
-  // Group data by insertion month for timeline view
-  const monthlyData = forecastData.reduce((acc, item) => {
-    const monthKey = item.insertion_month_start;
-    if (!acc[monthKey]) {
-      acc[monthKey] = {
-        month: monthKey,
+  // Group data by execution date for timeline view
+  const dailyData = forecastData.reduce((acc, item) => {
+    const dateKey = item.execution_date;
+    if (!acc[dateKey]) {
+      acc[dateKey] = {
+        date: dateKey,
         clicks: 0,
         spend: 0,
         placements: 0,
         creators: new Set(),
       };
     }
-    acc[monthKey].clicks += item.forecasted_clicks;
-    acc[monthKey].spend += item.forecasted_spend;
-    acc[monthKey].placements += 1;
-    acc[monthKey].creators.add(item.creator_name);
+    acc[dateKey].clicks += item.forecasted_clicks;
+    acc[dateKey].spend += item.forecasted_spend;
+    acc[dateKey].placements += 1;
+    acc[dateKey].creators.add(item.creator_name);
     return acc;
-  }, {} as Record<string, { month: string; clicks: number; spend: number; placements: number; creators: Set<string> }>);
+  }, {} as Record<string, { date: string; clicks: number; spend: number; placements: number; creators: Set<string> }>);
 
-  // Sort by month
-  const sortedMonths = Object.values(monthlyData).sort((a, b) => 
-    new Date(a.month).getTime() - new Date(b.month).getTime()
+  // Sort by date
+  const sortedDates = Object.values(dailyData).sort((a, b) => 
+    new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
+  // Calculate cumulative spend
+  let cumulativeSpend = 0;
+  const cumulativeData = sortedDates.map(item => {
+    cumulativeSpend += item.spend;
+    return {
+      ...item,
+      cumulativeSpend
+    };
+  });
+
   const chartData = {
-    labels: sortedMonths.map(item => {
-      const date = new Date(item.month);
-      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    labels: cumulativeData.map(item => {
+      const date = new Date(item.date);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }),
     datasets: [
       {
-        label: 'Forecasted Clicks',
-        data: sortedMonths.map(item => item.clicks),
+        label: 'Daily Spend ($)',
+        data: cumulativeData.map(item => item.spend),
+        borderColor: 'rgb(34, 197, 94)', // green-500
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        yAxisID: 'y1',
+      },
+      {
+        label: 'Cumulative Spend ($)',
+        data: cumulativeData.map(item => item.cumulativeSpend),
         borderColor: 'rgb(59, 130, 246)', // blue-500
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         borderWidth: 3,
         fill: true,
         tension: 0.4,
         yAxisID: 'y',
-      },
-      {
-        label: 'Forecasted Spend ($)',
-        data: sortedMonths.map(item => item.spend),
-        borderColor: 'rgb(34, 197, 94)', // green-500
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-        borderWidth: 3,
-        fill: false,
-        tension: 0.4,
-        yAxisID: 'y1',
       },
     ],
   };
@@ -101,7 +111,7 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
     plugins: {
       title: {
         display: true,
-        text: `${campaignName} - Performance Forecast`,
+        text: `${campaignName} - Cumulative Revenue Forecast`,
         font: {
           size: 18,
           weight: 'bold' as const,
@@ -130,13 +140,13 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
         callbacks: {
           title: (context: any) => {
             const dataIndex = context[0].dataIndex;
-            const monthData = sortedMonths[dataIndex];
-            return `${monthData.month} (${monthData.placements} placements)`;
+            const dateData = cumulativeData[dataIndex];
+            return `${dateData.date} (${dateData.placements} placements)`;
           },
           afterTitle: (context: any) => {
             const dataIndex = context[0].dataIndex;
-            const monthData = sortedMonths[dataIndex];
-            const creatorList = Array.from(monthData.creators).join(', ');
+            const dateData = cumulativeData[dataIndex];
+            const creatorList = Array.from(dateData.creators).join(', ');
             return [`Creators: ${creatorList}`];
           },
           label: (context: any) => {
@@ -155,7 +165,7 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
         display: true,
         title: {
           display: true,
-          text: 'Month',
+          text: 'Execution Date',
           font: {
             size: 12,
             weight: 'normal' as const,
@@ -178,7 +188,7 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
         position: 'left' as const,
         title: {
           display: true,
-          text: 'Clicks',
+          text: 'Cumulative Spend ($)',
           font: {
             size: 12,
             weight: 'normal' as const,
@@ -202,7 +212,7 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
         position: 'right' as const,
         title: {
           display: true,
-          text: 'Spend ($)',
+          text: 'Daily Spend ($)',
           font: {
             size: 12,
             weight: 'normal' as const,

@@ -129,13 +129,12 @@ export interface HistoricalDataResponse {
 }
 
 export interface CampaignForecastData {
-  placement_id: number;
+  placement_id: number | string;
   creator_id: number;
   creator_name: string;
   creator_acct_id: string;
   insertion_id: number;
-  insertion_month_start: string;
-  insertion_month_end: string;
+  execution_date: string;
   cpc: number;
   forecasted_clicks: number;
   forecasted_spend: number;
