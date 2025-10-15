@@ -59,6 +59,9 @@ export interface PlanCreator {
   topic_score?: number;
   similarity_score?: number;
   combined_score?: number;
+  // Placement planning fields
+  recommended_placements?: number;
+  median_clicks_per_placement?: number;
 }
 
 export interface PlanResponse {

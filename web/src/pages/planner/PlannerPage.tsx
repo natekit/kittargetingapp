@@ -27,6 +27,9 @@ export function PlannerPage() {
     target_location: '',
     target_interests: '',
     use_smart_matching: true,
+    // Creator filtering fields
+    include_acct_ids: '',
+    exclude_acct_ids: '',
   });
 
   useEffect(() => {
@@ -108,6 +111,14 @@ export function PlannerPage() {
           requestData.target_interests = formData.target_interests;
         }
         requestData.use_smart_matching = formData.use_smart_matching;
+      }
+
+      // Add creator filtering fields
+      if (formData.include_acct_ids && formData.include_acct_ids.trim() !== '') {
+        requestData.include_acct_ids = formData.include_acct_ids.trim();
+      }
+      if (formData.exclude_acct_ids && formData.exclude_acct_ids.trim() !== '') {
+        requestData.exclude_acct_ids = formData.exclude_acct_ids.trim();
       }
 
       const data = formData.use_smart_matching 
@@ -454,6 +465,46 @@ export function PlannerPage() {
               </div>
             )}
 
+            {/* Creator Filtering Section */}
+            <div className="border-t pt-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Creator Filtering (Optional)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="include_acct_ids" className="block text-sm font-medium text-gray-700">
+                    Include Only These Creators
+                  </label>
+                  <Input
+                    id="include_acct_ids"
+                    type="text"
+                    value={formData.include_acct_ids}
+                    onChange={(e) => setFormData({ ...formData, include_acct_ids: e.target.value })}
+                    className="mt-1"
+                    placeholder="12345,67890,11111"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Comma-separated list of Acct IDs to include (leave empty to include all)
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="exclude_acct_ids" className="block text-sm font-medium text-gray-700">
+                    Exclude These Creators
+                  </label>
+                  <Input
+                    id="exclude_acct_ids"
+                    type="text"
+                    value={formData.exclude_acct_ids}
+                    onChange={(e) => setFormData({ ...formData, exclude_acct_ids: e.target.value })}
+                    className="mt-1"
+                    placeholder="99999,88888"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Comma-separated list of Acct IDs to exclude from the plan
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <Button type="submit" disabled={loading}>
               {loading ? 'Creating Plan...' : 'Create Plan'}
             </Button>
@@ -540,6 +591,9 @@ export function PlannerPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Expected Conversions
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Placements
+                    </th>
                     {formData.use_smart_matching && (
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Matching Rationale
@@ -568,6 +622,16 @@ export function PlannerPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {creator.expected_conversions.toFixed(0)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="font-medium">
+                          {creator.recommended_placements || 1}
+                        </div>
+                        {creator.median_clicks_per_placement && (
+                          <div className="text-xs text-gray-500">
+                            {creator.median_clicks_per_placement.toFixed(0)} clicks/placement
+                          </div>
+                        )}
                       </td>
                       {formData.use_smart_matching && (
                         <td className="px-6 py-4 text-sm text-gray-900">

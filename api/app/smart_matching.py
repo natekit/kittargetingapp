@@ -485,9 +485,39 @@ class SmartMatchingService:
         
         # Calculate expected clicks based on historical performance
         if total_clicks > 0:
-            # Use historical average clicks per day, scaled to horizon
-            avg_clicks_per_day = total_clicks / 30  # Assume 30-day average
-            expected_clicks = avg_clicks_per_day * horizon_days
+            # Get individual placement click data to calculate median clicks per placement
+            placement_clicks_query = self.db.query(ClickUnique.unique_clicks).join(
+                PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+            ).join(
+                Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+            ).join(
+                Campaign, Campaign.campaign_id == Insertion.campaign_id
+            ).filter(ClickUnique.creator_id == creator.creator_id)
+            
+            # Add category or advertiser filter
+            if category:
+                placement_clicks_query = placement_clicks_query.join(
+                    Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+                ).filter(Advertiser.category == category)
+            elif advertiser_id:
+                placement_clicks_query = placement_clicks_query.filter(Campaign.advertiser_id == advertiser_id)
+            
+            placement_clicks = [row[0] for row in placement_clicks_query.all() if row[0] is not None]
+            
+            if placement_clicks:
+                # Calculate median clicks per placement
+                placement_clicks.sort()
+                median_clicks = placement_clicks[len(placement_clicks) // 2]
+                print(f"DEBUG: Creator {creator.creator_id} - Median clicks per placement: {median_clicks}")
+                
+                # For now, assume 1 placement per creator
+                # TODO: Implement logic to add more placements when under budget
+                expected_clicks = median_clicks
+                print(f"DEBUG: Creator {creator.creator_id} - Using median clicks for 1 placement: {expected_clicks}")
+            else:
+                # Fallback to conservative estimate
+                expected_clicks = creator.conservative_click_estimate or 100
+                print(f"DEBUG: Creator {creator.creator_id} - No placement data, using conservative estimate: {expected_clicks}")
         else:
             # Fallback to conservative estimate
             expected_clicks = creator.conservative_click_estimate or 100
@@ -508,7 +538,9 @@ class SmartMatchingService:
             'expected_conversions': expected_conversions,
             'expected_cvr': expected_cvr,
             'historical_clicks': total_clicks,
-            'historical_conversions': total_conversions
+            'historical_conversions': total_conversions,
+            'median_clicks_per_placement': median_clicks if 'median_clicks' in locals() else None,
+            'recommended_placements': 1  # Start with 1 placement, can be increased if under budget
         }
     
     def _calculate_topic_match(self, creator: Creator, target_topics: set) -> float:
