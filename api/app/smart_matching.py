@@ -390,15 +390,86 @@ class SmartMatchingService:
         horizon_days: int,
         advertiser_avg_cvr: float
     ) -> Dict[str, Any]:
-        """Get creator performance data (reuse existing logic)."""
-        # This would reuse the existing performance calculation logic
-        # For now, return a simplified version
+        """Get creator performance data based on historical data."""
+        from sqlalchemy import func, and_
+        from app.models import ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion
+        
+        print(f"DEBUG: Getting performance data for creator {creator.creator_id} ({creator.name})")
+        
+        # Build base query for clicks
+        clicks_query = self.db.query(func.sum(ClickUnique.unique_clicks)).join(
+            PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+        ).join(
+            Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+        ).join(
+            Campaign, Campaign.campaign_id == Insertion.campaign_id
+        ).filter(ClickUnique.creator_id == creator.creator_id)
+        
+        # Add category or advertiser filter
+        if category:
+            clicks_query = clicks_query.join(
+                Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+            ).filter(Advertiser.category == category)
+        elif advertiser_id:
+            clicks_query = clicks_query.filter(Campaign.advertiser_id == advertiser_id)
+        
+        total_clicks = clicks_query.scalar() or 0
+        print(f"DEBUG: Creator {creator.creator_id} - Total historical clicks: {total_clicks}")
+        
+        # Build base query for conversions
+        conversions_query = self.db.query(func.sum(Conversion.conversions)).join(
+            Insertion, Insertion.insertion_id == Conversion.insertion_id
+        ).join(
+            Campaign, Campaign.campaign_id == Insertion.campaign_id
+        ).filter(Conversion.creator_id == creator.creator_id)
+        
+        # Add category or advertiser filter
+        if category:
+            conversions_query = conversions_query.join(
+                Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+            ).filter(Advertiser.category == category)
+        elif advertiser_id:
+            conversions_query = conversions_query.filter(Campaign.advertiser_id == advertiser_id)
+        
+        total_conversions = conversions_query.scalar() or 0
+        print(f"DEBUG: Creator {creator.creator_id} - Total historical conversions: {total_conversions}")
+        
+        # Calculate historical CVR
+        historical_cvr = 0.0
+        if total_clicks > 0:
+            historical_cvr = total_conversions / total_clicks
+            print(f"DEBUG: Creator {creator.creator_id} - Historical CVR: {historical_cvr:.4f}")
+        
+        # Use historical CVR if available, otherwise use advertiser average
+        expected_cvr = historical_cvr if historical_cvr > 0 else advertiser_avg_cvr
+        print(f"DEBUG: Creator {creator.creator_id} - Using CVR: {expected_cvr:.4f}")
+        
+        # Calculate expected clicks based on historical performance
+        if total_clicks > 0:
+            # Use historical average clicks per day, scaled to horizon
+            avg_clicks_per_day = total_clicks / 30  # Assume 30-day average
+            expected_clicks = avg_clicks_per_day * horizon_days
+        else:
+            # Fallback to conservative estimate
+            expected_clicks = creator.conservative_click_estimate or 100
+            print(f"DEBUG: Creator {creator.creator_id} - Using conservative estimate: {expected_clicks}")
+        
+        # Calculate other metrics
+        expected_spend = cpc * expected_clicks
+        expected_conversions = expected_clicks * expected_cvr
+        expected_cpa = cpc / expected_cvr if expected_cvr > 0 else None
+        
+        print(f"DEBUG: Creator {creator.creator_id} - Expected clicks: {expected_clicks}, spend: ${expected_spend:.2f}, conversions: {expected_conversions:.2f}")
+        
         return {
-            'has_performance': True,
-            'expected_cpa': 10.0,  # Placeholder
-            'expected_clicks': 100,  # Placeholder
-            'expected_spend': 1000.0,  # Placeholder
-            'expected_conversions': 10.0  # Placeholder
+            'has_performance': total_clicks > 0 or total_conversions > 0,
+            'expected_cpa': expected_cpa,
+            'expected_clicks': expected_clicks,
+            'expected_spend': expected_spend,
+            'expected_conversions': expected_conversions,
+            'expected_cvr': expected_cvr,
+            'historical_clicks': total_clicks,
+            'historical_conversions': total_conversions
         }
     
     def _calculate_topic_match(self, creator: Creator, target_topics: set) -> float:
