@@ -300,27 +300,22 @@ async def create_plan(
     if plan_request.include_acct_ids or plan_request.exclude_acct_ids:
         print("DEBUG: Applying creator filtering")
         
-        # Parse include Acct IDs
+        # Parse include Acct IDs (additive - ensure these creators are included)
         include_acct_ids = set()
         if plan_request.include_acct_ids:
             include_acct_ids = {acct_id.strip() for acct_id in plan_request.include_acct_ids.split(',') if acct_id.strip()}
-            print(f"DEBUG: Include Acct IDs: {include_acct_ids}")
+            print(f"DEBUG: Include Acct IDs (additive): {include_acct_ids}")
         
-        # Parse exclude Acct IDs
+        # Parse exclude Acct IDs (restrictive - exclude these creators)
         exclude_acct_ids = set()
         if plan_request.exclude_acct_ids:
             exclude_acct_ids = {acct_id.strip() for acct_id in plan_request.exclude_acct_ids.split(',') if acct_id.strip()}
             print(f"DEBUG: Exclude Acct IDs: {exclude_acct_ids}")
         
-        # Filter creators
+        # First, filter out excluded creators
         filtered_creators = []
         for creator in creators:
             creator_acct_id = creator.acct_id.strip()
-            
-            # If include list is specified, only include creators in that list
-            if include_acct_ids and creator_acct_id not in include_acct_ids:
-                print(f"DEBUG: Excluding creator {creator.name} (Acct ID: {creator_acct_id}) - not in include list")
-                continue
             
             # If exclude list is specified, exclude creators in that list
             if exclude_acct_ids and creator_acct_id in exclude_acct_ids:
@@ -329,6 +324,17 @@ async def create_plan(
             
             filtered_creators.append(creator)
             print(f"DEBUG: Including creator {creator.name} (Acct ID: {creator_acct_id})")
+        
+        # If include list is specified, ensure those creators are added even if not in filtered list
+        if include_acct_ids:
+            print("DEBUG: Adding required creators from include list")
+            for creator in creators:
+                creator_acct_id = creator.acct_id.strip()
+                if creator_acct_id in include_acct_ids:
+                    # Check if already in filtered list
+                    if not any(c.creator_id == creator.creator_id for c in filtered_creators):
+                        filtered_creators.append(creator)
+                        print(f"DEBUG: Added required creator {creator.name} (Acct ID: {creator_acct_id})")
         
         creators = filtered_creators
         print(f"DEBUG: After filtering: {len(creators)} creators remaining")

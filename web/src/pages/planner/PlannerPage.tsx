@@ -471,7 +471,7 @@ export function PlannerPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="include_acct_ids" className="block text-sm font-medium text-gray-700">
-                    Include Only These Creators
+                    Ensure These Creators Are Included
                   </label>
                   <Input
                     id="include_acct_ids"
@@ -482,7 +482,7 @@ export function PlannerPage() {
                     placeholder="12345,67890,11111"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Comma-separated list of Acct IDs to include (leave empty to include all)
+                    Comma-separated list of Acct IDs to guarantee inclusion in the plan
                   </p>
                 </div>
 

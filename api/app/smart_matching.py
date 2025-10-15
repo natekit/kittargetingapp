@@ -54,27 +54,22 @@ class SmartMatchingService:
         if include_acct_ids or exclude_acct_ids:
             logger.info("Applying creator filtering")
             
-            # Parse include Acct IDs
+            # Parse include Acct IDs (additive - ensure these creators are included)
             include_acct_ids_set = set()
             if include_acct_ids:
                 include_acct_ids_set = {acct_id.strip() for acct_id in include_acct_ids.split(',') if acct_id.strip()}
-                logger.info(f"Include Acct IDs: {include_acct_ids_set}")
+                logger.info(f"Include Acct IDs (additive): {include_acct_ids_set}")
             
-            # Parse exclude Acct IDs
+            # Parse exclude Acct IDs (restrictive - exclude these creators)
             exclude_acct_ids_set = set()
             if exclude_acct_ids:
                 exclude_acct_ids_set = {acct_id.strip() for acct_id in exclude_acct_ids.split(',') if acct_id.strip()}
                 logger.info(f"Exclude Acct IDs: {exclude_acct_ids_set}")
             
-            # Filter creators
+            # First, filter out excluded creators
             filtered_creators = []
             for creator in all_creators:
                 creator_acct_id = creator.acct_id.strip()
-                
-                # If include list is specified, only include creators in that list
-                if include_acct_ids_set and creator_acct_id not in include_acct_ids_set:
-                    logger.debug(f"Excluding creator {creator.name} (Acct ID: {creator_acct_id}) - not in include list")
-                    continue
                 
                 # If exclude list is specified, exclude creators in that list
                 if exclude_acct_ids_set and creator_acct_id in exclude_acct_ids_set:
@@ -83,6 +78,17 @@ class SmartMatchingService:
                 
                 filtered_creators.append(creator)
                 logger.debug(f"Including creator {creator.name} (Acct ID: {creator_acct_id})")
+            
+            # If include list is specified, ensure those creators are added even if not in filtered list
+            if include_acct_ids_set:
+                logger.info("Adding required creators from include list")
+                for creator in all_creators:
+                    creator_acct_id = creator.acct_id.strip()
+                    if creator_acct_id in include_acct_ids_set:
+                        # Check if already in filtered list
+                        if not any(c.creator_id == creator.creator_id for c in filtered_creators):
+                            filtered_creators.append(creator)
+                            logger.info(f"Added required creator {creator.name} (Acct ID: {creator_acct_id})")
             
             all_creators = filtered_creators
             logger.info(f"After filtering: {len(all_creators)} creators remaining")
