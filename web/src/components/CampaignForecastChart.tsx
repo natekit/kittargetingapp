@@ -105,18 +105,23 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
-      mode: 'index' as const,
+      mode: 'nearest' as const,
       intersect: false,
+      axis: 'x' as const,
     },
     plugins: {
       title: {
         display: true,
         text: `${campaignName} - Cumulative Revenue Forecast`,
         font: {
-          size: 18,
+          size: 20,
           weight: 'bold' as const,
         },
-        color: '#374151', // gray-700
+        color: '#1F2937', // gray-800
+        padding: {
+          top: 20,
+          bottom: 30
+        }
       },
       legend: {
         position: 'top' as const,
@@ -130,13 +135,23 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
         titleColor: 'white',
         bodyColor: 'white',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: 'rgba(255, 255, 255, 0.2)',
         borderWidth: 1,
-        cornerRadius: 8,
+        cornerRadius: 12,
         displayColors: true,
+        padding: 12,
+        titleFont: {
+          size: 14,
+          weight: 'bold' as const
+        },
+        bodyFont: {
+          size: 12,
+          weight: 'normal' as const
+        },
+        maxWidth: 300,
         callbacks: {
           title: (context: any) => {
             const dataIndex = context[0].dataIndex;
@@ -245,8 +260,8 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <div className="mb-6">
+    <div className="bg-white rounded-lg border border-gray-200 p-8">
+      <div className="mb-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-blue-50 rounded-lg p-4">
             <div className="text-blue-600 text-sm font-medium">Total Forecasted Clicks</div>
@@ -263,12 +278,14 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
         </div>
       </div>
       
-      <div className="h-96">
-        <Line data={chartData} options={options} />
+      <div className="bg-gray-50 rounded-lg p-4 mb-6">
+        <div className="h-[600px] w-full">
+          <Line data={chartData} options={options} />
+        </div>
       </div>
       
-      <div className="mt-4 text-xs text-gray-500 text-center">
-        Forecast based on historical performance data and conservative estimates
+      <div className="mt-6 text-sm text-gray-600 text-center bg-gray-50 rounded-lg py-3">
+        <strong>Forecast Methodology:</strong> Based on historical performance data and conservative estimates
       </div>
     </div>
   );
