@@ -163,6 +163,9 @@ export function CampaignForecastPage() {
                         Creator
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Insertion Period
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Execution Date
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -186,6 +189,17 @@ export function CampaignForecastPage() {
                           <div className="space-y-1">
                             <div className="text-sm font-medium text-gray-900">{placement.creator_name}</div>
                             <div className="text-xs text-gray-500">ID: {placement.creator_acct_id}</div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-900">
+                          <div className="font-medium">
+                            {new Date(placement.insertion_month_start).toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              year: 'numeric' 
+                            })}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(placement.insertion_month_start).toLocaleDateString()} - {new Date(placement.insertion_month_end).toLocaleDateString()}
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-900">

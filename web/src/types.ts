@@ -134,6 +134,8 @@ export interface CampaignForecastData {
   creator_name: string;
   creator_acct_id: string;
   insertion_id: number;
+  insertion_month_start: string;
+  insertion_month_end: string;
   execution_date: string;
   cpc: number;
   forecasted_clicks: number;

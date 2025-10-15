@@ -1020,6 +1020,8 @@ async def get_campaign_forecast(
                         'creator_name': creator.name,
                         'creator_acct_id': creator.acct_id,
                         'insertion_id': insertion.insertion_id,
+                        'insertion_month_start': insertion.month_start.isoformat(),
+                        'insertion_month_end': insertion.month_end.isoformat(),
                         'execution_date': execution_date.isoformat(),
                         'cpc': float(insertion.cpc),
                         'forecasted_clicks': forecasted_clicks,
@@ -1041,6 +1043,8 @@ async def get_campaign_forecast(
                     'creator_name': creator.name,
                     'creator_acct_id': creator.acct_id,
                     'insertion_id': insertion.insertion_id,
+                    'insertion_month_start': insertion.month_start.isoformat(),
+                    'insertion_month_end': insertion.month_end.isoformat(),
                     'execution_date': insertion.month_start.isoformat(),  # Use insertion start as fallback
                     'cpc': float(insertion.cpc),
                     'forecasted_clicks': forecasted_clicks,
