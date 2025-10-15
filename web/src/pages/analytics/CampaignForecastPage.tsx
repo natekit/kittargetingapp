@@ -34,6 +34,8 @@ export function CampaignForecastPage() {
 
     try {
       const data = await api.getCampaignForecast(selectedCampaignId);
+      console.log('Forecast data received:', data);
+      console.log('First forecast item:', data.forecast_data[0]);
       setForecastData(data);
     } catch (error) {
       console.error('Error fetching campaign forecast:', error);
@@ -188,14 +190,20 @@ export function CampaignForecastPage() {
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-900">
                           <div className="font-medium">
-                            {new Date(placement.execution_date).toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric',
-                              year: 'numeric' 
-                            })}
+                            {placement.execution_date ? 
+                              new Date(placement.execution_date).toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric',
+                                year: 'numeric' 
+                              }) : 
+                              'No date'
+                            }
                           </div>
                           <div className="text-xs text-gray-500">
-                            {new Date(placement.execution_date).toLocaleDateString()}
+                            {placement.execution_date ? 
+                              new Date(placement.execution_date).toLocaleDateString() : 
+                              'Execution date not available'
+                            }
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-900">
