@@ -65,4 +65,4 @@ Once running, visit:
 ### Health Check
 
 - `GET /healthz` - Returns API health status
-# Trigger API deployment - Chart feature added
+# Trigger API deployment - Chart feature added - Date display fix
