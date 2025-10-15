@@ -4,7 +4,7 @@ from sqlalchemy import func, text, case, and_, or_
 from typing import Dict, Any, List, Optional
 import logging
 from pydantic import BaseModel
-from datetime import datetime, date, timedelta
+from datetime import date, timedelta
 from app.models import Creator, ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion, ConvUpload, DeclinedCreator, Placement
 from app.smart_matching import SmartMatchingService
 from app.db import get_db
@@ -997,23 +997,43 @@ async def get_campaign_forecast(
             # Calculate forecasted spend
             forecasted_spend = float(insertion.cpc) * forecasted_clicks
             
-            forecast_entry = {
-                'placement_id': placement.placement_id,
-                'creator_id': creator.creator_id,
-                'creator_name': creator.name,
-                'creator_acct_id': creator.acct_id,
-                'insertion_id': insertion.insertion_id,
-                'insertion_month_start': insertion.month_start.isoformat(),
-                'insertion_month_end': insertion.month_end.isoformat(),
-                'cpc': float(insertion.cpc),
-                'forecasted_clicks': forecasted_clicks,
-                'forecasted_spend': forecasted_spend,
-                'forecast_method': 'current_month' if current_month_clicks > 0 else 'other_campaigns' if other_campaigns_clicks > 0 else 'conservative_estimate'
-            }
+            # Create separate entries for each date in the insertion period
+            # This gives us a timeline view of when spend will occur
+            insertion_start = insertion.month_start
+            insertion_end = insertion.month_end
             
-            forecast_data.append(forecast_entry)
-            total_forecasted_spend += forecasted_spend
-            total_forecasted_clicks += forecasted_clicks
+            # Create entries for each month in the insertion period
+            current_date = insertion_start
+            while current_date <= insertion_end:
+                # Calculate the end of the current month
+                if current_date.month == 12:
+                    next_month = current_date.replace(year=current_date.year + 1, month=1, day=1)
+                else:
+                    next_month = current_date.replace(month=current_date.month + 1, day=1)
+                
+                month_end = min(next_month - timedelta(days=1), insertion_end)
+                
+                # Create forecast entry for this month
+                forecast_entry = {
+                    'placement_id': f"{placement.placement_id}_{current_date.strftime('%Y-%m')}",
+                    'creator_id': creator.creator_id,
+                    'creator_name': creator.name,
+                    'creator_acct_id': creator.acct_id,
+                    'insertion_id': insertion.insertion_id,
+                    'insertion_month_start': current_date.isoformat(),
+                    'insertion_month_end': month_end.isoformat(),
+                    'cpc': float(insertion.cpc),
+                    'forecasted_clicks': forecasted_clicks,
+                    'forecasted_spend': forecasted_spend,
+                    'forecast_method': 'current_month' if current_month_clicks > 0 else 'other_campaigns' if other_campaigns_clicks > 0 else 'conservative_estimate'
+                }
+                
+                forecast_data.append(forecast_entry)
+                total_forecasted_spend += forecasted_spend
+                total_forecasted_clicks += forecasted_clicks
+                
+                # Move to next month
+                current_date = next_month
         
         print(f"DEBUG: Forecast complete - {len(forecast_data)} placements, ${total_forecasted_spend:.2f} spend, {total_forecasted_clicks} clicks")
         

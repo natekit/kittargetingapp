@@ -47,13 +47,15 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
         clicks: 0,
         spend: 0,
         placements: 0,
+        creators: new Set(),
       };
     }
     acc[monthKey].clicks += item.forecasted_clicks;
     acc[monthKey].spend += item.forecasted_spend;
     acc[monthKey].placements += 1;
+    acc[monthKey].creators.add(item.creator_name);
     return acc;
-  }, {} as Record<string, { month: string; clicks: number; spend: number; placements: number }>);
+  }, {} as Record<string, { month: string; clicks: number; spend: number; placements: number; creators: Set<string> }>);
 
   // Sort by month
   const sortedMonths = Object.values(monthlyData).sort((a, b) => 
@@ -130,6 +132,12 @@ export const CampaignForecastChart: React.FC<CampaignForecastChartProps> = ({
             const dataIndex = context[0].dataIndex;
             const monthData = sortedMonths[dataIndex];
             return `${monthData.month} (${monthData.placements} placements)`;
+          },
+          afterTitle: (context: any) => {
+            const dataIndex = context[0].dataIndex;
+            const monthData = sortedMonths[dataIndex];
+            const creatorList = Array.from(monthData.creators).join(', ');
+            return [`Creators: ${creatorList}`];
           },
           label: (context: any) => {
             const label = context.dataset.label;
