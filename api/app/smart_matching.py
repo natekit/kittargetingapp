@@ -102,30 +102,31 @@ class SmartMatchingService:
             all_creators, advertiser_id, category, cpc, target_cpa, 
             horizon_days, advertiser_avg_cvr
         )
-        logger.info(f"Tier 1: {len(tier1_creators)} creators with historical performance")
+        print(f"DEBUG: Tier 1: {len(tier1_creators)} creators with historical performance")
         
         # Tier 2: Topic/keyword matches to high performers
         tier2_creators = self._get_tier2_creators(
             all_creators, tier1_creators, advertiser_id, category
         )
-        logger.info(f"Tier 2: {len(tier2_creators)} creators with topic/keyword matches")
+        print(f"DEBUG: Tier 2: {len(tier2_creators)} creators with topic/keyword matches")
         
         # Tier 3: Demographic matches
         tier3_creators = self._get_tier3_creators(
             all_creators, target_demographics, advertiser_id, category
         )
-        logger.info(f"Tier 3: {len(tier3_creators)} creators with demographic matches")
+        print(f"DEBUG: Tier 3: {len(tier3_creators)} creators with demographic matches")
         
         # Tier 4: Similar creators to high performers
         tier4_creators = self._get_tier4_creators(
             all_creators, tier1_creators, advertiser_id, category
         )
-        logger.info(f"Tier 4: {len(tier4_creators)} creators similar to high performers")
+        print(f"DEBUG: Tier 4: {len(tier4_creators)} creators similar to high performers")
         
         # Combine and deduplicate
         all_matched_creators = self._combine_creator_tiers(
             tier1_creators, tier2_creators, tier3_creators, tier4_creators
         )
+        print(f"DEBUG: Combined tiers: {len(all_matched_creators)} total creators")
         
         # Calculate final scores and rationale
         final_creators = self._calculate_final_scores(
@@ -135,26 +136,17 @@ class SmartMatchingService:
         # Sort by combined score
         final_creators.sort(key=lambda x: x['combined_score'], reverse=True)
         
-        logger.info(f"Final selection: {len(final_creators)} creators")
+        print(f"DEBUG: Final selection: {len(final_creators)} creators")
         return final_creators
     
     def _get_base_creators_query(self, advertiser_id: Optional[int], category: Optional[str]):
-        """Get base creators query with proper joins."""
+        """Get base creators query - return ALL creators, don't filter by historical data."""
+        # Always return all creators, let the tiers handle filtering
         query = self.db.query(Creator)
         
-        if category:
-            query = query.join(ClickUnique, ClickUnique.creator_id == Creator.creator_id)\
-                        .join(PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id)\
-                        .join(Insertion, Insertion.insertion_id == PerfUpload.insertion_id)\
-                        .join(Campaign, Campaign.campaign_id == Insertion.campaign_id)\
-                        .join(Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id)\
-                        .filter(Advertiser.category == category)
-        elif advertiser_id:
-            query = query.join(ClickUnique, ClickUnique.creator_id == Creator.creator_id)\
-                        .join(PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id)\
-                        .join(Insertion, Insertion.insertion_id == PerfUpload.insertion_id)\
-                        .join(Campaign, Campaign.campaign_id == Insertion.campaign_id)\
-                        .filter(Campaign.advertiser_id == advertiser_id)
+        # Only apply basic filters, don't join on performance data
+        # This ensures we get the full creator pool (800 creators)
+        # The tier logic will handle performance-based filtering later
         
         return query
     
@@ -516,8 +508,7 @@ class SmartMatchingService:
                 median_clicks = placement_clicks[len(placement_clicks) // 2]
                 print(f"DEBUG: Creator {creator.creator_id} - Median clicks per placement: {median_clicks}")
                 
-                # For now, assume 1 placement per creator
-                # TODO: Implement logic to add more placements when under budget
+                # Use median clicks per placement (keep original logic)
                 expected_clicks = median_clicks
                 print(f"DEBUG: Creator {creator.creator_id} - Using median clicks for 1 placement: {expected_clicks}")
             else:
