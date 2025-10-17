@@ -873,7 +873,8 @@ async def get_historical_data(
             individual_clicks = clicks_query.all()
             print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - Individual click records: {[(c.unique_clicks, c.execution_date) for c in individual_clicks]}")
             
-            total_clicks = db.query(func.sum(ClickUnique.unique_clicks)).select_from(clicks_query.subquery()).scalar() or 0
+            # Calculate total clicks directly from the individual records
+            total_clicks = sum(record.unique_clicks for record in individual_clicks)
             print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - total clicks: {total_clicks}")
             
             # Get conversion data
