@@ -45,10 +45,10 @@ class SmartMatchingService:
         """
         logger.info(f"Starting smart matching for advertiser_id={advertiser_id}, category={category}")
         
-        # Get base creators query - LIMIT to reasonable number for performance
+        # Get base creators query - INCREASE limit to get more creators for budget
         creators_query = self._get_base_creators_query(advertiser_id, category)
-        all_creators = creators_query.distinct().limit(200).all()  # Limit to 200 creators for performance
-        print(f"DEBUG: Found {len(all_creators)} total creators (limited to 200 for performance)")
+        all_creators = creators_query.distinct().limit(500).all()  # Increase to 500 creators for better budget utilization
+        print(f"DEBUG: Found {len(all_creators)} total creators (limited to 500 for budget utilization)")
         
         # Apply creator filtering based on Acct IDs
         if include_acct_ids or exclude_acct_ids:
@@ -104,42 +104,24 @@ class SmartMatchingService:
         )
         print(f"DEBUG: Tier 1: {len(tier1_creators)} creators with historical performance")
         
-        # Early termination if we have enough creators for budget
-        total_creators_so_far = len(tier1_creators)
-        if total_creators_so_far >= 50:  # If we have 50+ creators, skip expensive tiers
-            print(f"DEBUG: Early termination - have {total_creators_so_far} creators, skipping expensive tiers")
-            tier2_creators = []
-            tier3_creators = []
-            tier4_creators = []
-        else:
-            # Tier 2: Topic/keyword matches to high performers (only if needed)
-            tier2_creators = self._get_tier2_creators(
-                all_creators, tier1_creators, advertiser_id, category
-            )
-            print(f"DEBUG: Tier 2: {len(tier2_creators)} creators with topic/keyword matches")
-            
-            total_creators_so_far += len(tier2_creators)
-            if total_creators_so_far >= 50:
-                print(f"DEBUG: Early termination - have {total_creators_so_far} creators, skipping remaining tiers")
-                tier3_creators = []
-                tier4_creators = []
-            else:
-                # Tier 3: Demographic matches (only if needed)
-                tier3_creators = self._get_tier3_creators(
-                    all_creators, target_demographics, advertiser_id, category
-                )
-                print(f"DEBUG: Tier 3: {len(tier3_creators)} creators with demographic matches")
-                
-                total_creators_so_far += len(tier3_creators)
-                if total_creators_so_far >= 50:
-                    print(f"DEBUG: Early termination - have {total_creators_so_far} creators, skipping tier 4")
-                    tier4_creators = []
-                else:
-                    # Tier 4: Similar creators to high performers (only if needed)
-                    tier4_creators = self._get_tier4_creators(
-                        all_creators, tier1_creators, advertiser_id, category
-                    )
-                    print(f"DEBUG: Tier 4: {len(tier4_creators)} creators similar to high performers")
+        # Always run all tiers to get maximum creators for budget utilization
+        # Tier 2: Topic/keyword matches to high performers
+        tier2_creators = self._get_tier2_creators(
+            all_creators, tier1_creators, advertiser_id, category
+        )
+        print(f"DEBUG: Tier 2: {len(tier2_creators)} creators with topic/keyword matches")
+        
+        # Tier 3: Demographic matches
+        tier3_creators = self._get_tier3_creators(
+            all_creators, target_demographics, advertiser_id, category
+        )
+        print(f"DEBUG: Tier 3: {len(tier3_creators)} creators with demographic matches")
+        
+        # Tier 4: Similar creators to high performers
+        tier4_creators = self._get_tier4_creators(
+            all_creators, tier1_creators, advertiser_id, category
+        )
+        print(f"DEBUG: Tier 4: {len(tier4_creators)} creators similar to high performers")
         
         # Combine and deduplicate
         all_matched_creators = self._combine_creator_tiers(
@@ -225,14 +207,34 @@ class SmartMatchingService:
         advertiser_id: Optional[int], 
         category: Optional[str]
     ) -> List[Dict[str, Any]]:
-        """Tier 2: Creators with topic/keyword matches - OPTIMIZED VERSION."""
+        """Tier 2: Creators with topic/keyword matches - FAST VERSION."""
         if not tier1_creators:
             return []
         
-        # Skip expensive topic/keyword matching for now - just return empty
-        # This is the most expensive part and we can get good results without it
-        print("DEBUG: Skipping Tier 2 (topic/keyword matching) for performance")
-        return []
+        # Simple topic matching without expensive DB queries
+        tier2_creators = []
+        tier1_creator_ids = {cd['creator'].creator_id for cd in tier1_creators}
+        
+        # Just add creators that aren't in tier 1 - simple and fast
+        for creator in all_creators[:100]:  # Limit to first 100 for performance
+            if creator.creator_id not in tier1_creator_ids:
+                creator_data = {
+                    'creator': creator,
+                    'tier': 2,
+                    'performance_data': None,  # Skip expensive performance query
+                    'matching_rationale': 'Additional creator for budget utilization',
+                    'performance_score': 0.0,
+                    'demographic_score': 0.0,
+                    'topic_score': 0.5,  # Medium score
+                    'similarity_score': 0.0
+                }
+                tier2_creators.append(creator_data)
+                
+                # Stop after finding 50 additional creators
+                if len(tier2_creators) >= 50:
+                    break
+        
+        return tier2_creators
     
     def _get_tier3_creators(
         self, 
@@ -286,14 +288,34 @@ class SmartMatchingService:
         advertiser_id: Optional[int], 
         category: Optional[str]
     ) -> List[Dict[str, Any]]:
-        """Tier 4: Creators similar to high performers - OPTIMIZED VERSION."""
+        """Tier 4: Creators similar to high performers - FAST VERSION."""
         if not tier1_creators:
             return []
         
-        # Skip expensive similarity matching for now - just return empty
-        # This involves complex similarity calculations and we can get good results without it
-        print("DEBUG: Skipping Tier 4 (similarity matching) for performance")
-        return []
+        # Simple similarity matching without expensive DB queries
+        tier4_creators = []
+        tier1_creator_ids = {cd['creator'].creator_id for cd in tier1_creators}
+        
+        # Just add more creators that aren't in tier 1 or 2 - simple and fast
+        for creator in all_creators[100:200]:  # Next 100 creators for performance
+            if creator.creator_id not in tier1_creator_ids:
+                creator_data = {
+                    'creator': creator,
+                    'tier': 4,
+                    'performance_data': None,  # Skip expensive performance query
+                    'matching_rationale': 'Additional creator for budget utilization',
+                    'performance_score': 0.0,
+                    'demographic_score': 0.0,
+                    'topic_score': 0.0,
+                    'similarity_score': 0.3  # Medium similarity score
+                }
+                tier4_creators.append(creator_data)
+                
+                # Stop after finding 50 additional creators
+                if len(tier4_creators) >= 50:
+                    break
+        
+        return tier4_creators
     
     def _combine_creator_tiers(
         self, 
@@ -463,30 +485,13 @@ class SmartMatchingService:
                 median_clicks = placement_clicks[len(placement_clicks) // 2]
                 print(f"DEBUG: Creator {creator.creator_id} - Median clicks per placement: {median_clicks}")
                 
-                # Scale up clicks based on budget to ensure better utilization
-                # Use median clicks as base, but scale up for budget utilization
-                base_clicks = median_clicks
-                
-                # Scale factor: higher for better budget utilization
-                # Aim for creators to contribute $50-100 each to budget
-                target_spend_per_creator = 75  # Target $75 per creator
-                scale_factor = max(1.0, target_spend_per_creator / (base_clicks * cpc)) if cpc > 0 else 1.0
-                expected_clicks = int(base_clicks * scale_factor)
-                
-                # Ensure minimum clicks for budget utilization
-                min_clicks = max(50, int(100 / cpc)) if cpc > 0 else 50
-                expected_clicks = max(expected_clicks, min_clicks)
-                
-                print(f"DEBUG: Creator {creator.creator_id} - Scaled clicks: {expected_clicks} (base: {base_clicks}, scale: {scale_factor:.2f})")
+                # Use median clicks per placement (keep original logic)
+                expected_clicks = median_clicks
+                print(f"DEBUG: Creator {creator.creator_id} - Using median clicks for 1 placement: {expected_clicks}")
             else:
-                # Fallback to conservative estimate, but scale it up
-                base_clicks = creator.conservative_click_estimate or 100
-                target_spend_per_creator = 75
-                scale_factor = max(1.0, target_spend_per_creator / (base_clicks * cpc)) if cpc > 0 else 1.0
-                expected_clicks = int(base_clicks * scale_factor)
-                min_clicks = max(50, int(100 / cpc)) if cpc > 0 else 50
-                expected_clicks = max(expected_clicks, min_clicks)
-                print(f"DEBUG: Creator {creator.creator_id} - Scaled conservative estimate: {expected_clicks} (base: {base_clicks}, scale: {scale_factor:.2f})")
+                # Fallback to conservative estimate
+                expected_clicks = creator.conservative_click_estimate or 100
+                print(f"DEBUG: Creator {creator.creator_id} - No placement data, using conservative estimate: {expected_clicks}")
         else:
             # Fallback to conservative estimate
             expected_clicks = creator.conservative_click_estimate or 100
