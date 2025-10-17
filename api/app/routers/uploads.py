@@ -84,8 +84,10 @@ async def upload_performance_data(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Upload performance CSV data for a specific insertion.
-    Expected columns: Creator, Clicks, Unique, Flagged, Execution Date, Status
+    Upload performance or decline CSV data for a specific insertion.
+    
+    Performance CSV expected columns: Creator, Clicks, Unique, Flagged, Execution Date, Status
+    Decline CSV expected columns: Creator, Send Offer
     """
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -101,6 +103,16 @@ async def upload_performance_data(
         csv_content = content.decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(csv_content))
         
+        # Detect CSV type based on column presence
+        csv_columns = csv_reader.fieldnames or []
+        is_performance_csv = 'Clicks' in csv_columns and 'Unique' in csv_columns and 'Execution Date' in csv_columns
+        is_decline_csv = 'Send Offer' in csv_columns
+        
+        if not is_performance_csv and not is_decline_csv:
+            raise HTTPException(status_code=400, detail="CSV must contain either performance columns (Clicks, Unique, Execution Date) or decline columns (Send Offer)")
+        
+        print(f"DEBUG: Detected CSV type - Performance: {is_performance_csv}, Decline: {is_decline_csv}")
+        
         inserted_rows = 0
         unmatched_count = 0
         unmatched_examples = []
@@ -115,31 +127,28 @@ async def upload_performance_data(
         db.add(perf_upload)
         db.flush()  # Get the ID without committing
         
-        # Delete existing performance data for this insertion to replace with new data
-        existing_click_uniques = db.query(ClickUnique).filter(
-            ClickUnique.perf_upload_id.in_(
-                db.query(PerfUpload.perf_upload_id).filter(PerfUpload.insertion_id == insertion_id)
-            )
-        ).all()
-        
-        replaced_rows = len(existing_click_uniques)
-        for click_unique in existing_click_uniques:
-            db.delete(click_unique)
-        
-        print(f"DEBUG: Deleted {replaced_rows} existing performance records for insertion {insertion_id}")
+        # Delete existing performance data for this insertion to replace with new data (only for performance CSV)
+        replaced_rows = 0
+        if is_performance_csv:
+            existing_click_uniques = db.query(ClickUnique).filter(
+                ClickUnique.perf_upload_id.in_(
+                    db.query(PerfUpload.perf_upload_id).filter(PerfUpload.insertion_id == insertion_id)
+                )
+            ).all()
+            
+            replaced_rows = len(existing_click_uniques)
+            for click_unique in existing_click_uniques:
+                db.delete(click_unique)
+            
+            print(f"DEBUG: Deleted {replaced_rows} existing performance records for insertion {insertion_id}")
         
         for row in csv_reader:
             try:
                 # Extract data from CSV row
                 creator_field = row.get('Creator', '').strip()
-                clicks_str = row.get('Clicks', '').strip()
-                unique_str = row.get('Unique', '').strip()
-                flagged_str = row.get('Flagged', '').strip()
-                execution_date_str = row.get('Execution Date', '').strip()
-                status = row.get('Status', '').strip()
                 
-                # Skip rows with missing required fields
-                if not creator_field or not unique_str or not execution_date_str:
+                # Skip rows with missing creator field
+                if not creator_field:
                     continue
                 
                 # Extract email from creator field
@@ -159,58 +168,100 @@ async def upload_performance_data(
                     unmatched_examples.append(f"{creator_field[:30]} -> {creator_email}")
                     continue
                 
-                # Parse numeric values
-                try:
-                    unique_clicks = int(unique_str) if unique_str else 0
-                    raw_clicks = int(clicks_str) if clicks_str else None
-                except ValueError:
-                    continue
-                
-                # Parse flagged as boolean
-                flagged = None
-                if flagged_str.lower() in ['true', '1', 'yes', 'y']:
-                    flagged = True
-                elif flagged_str.lower() in ['false', '0', 'no', 'n']:
-                    flagged = False
-                
-                # Normalize execution date
-                execution_date = normalize_execution_date(execution_date_str)
-                if not execution_date:
-                    continue
-                
-                # Create click_unique record
-                click_unique = ClickUnique(
-                    perf_upload_id=perf_upload.perf_upload_id,
-                    creator_id=creator.creator_id,
-                    execution_date=execution_date,
-                    unique_clicks=unique_clicks,
-                    raw_clicks=raw_clicks,
-                    flagged=flagged,
-                    status=status if status else None
-                )
-                db.add(click_unique)
-                inserted_rows += 1
-                
-                # Check if status is "declined" and record it
-                if status and status.lower() == "declined":
-                    # Get advertiser_id from the insertion's campaign
-                    advertiser_id = insertion.campaign.advertiser_id
+                # Process based on CSV type
+                if is_performance_csv:
+                    # Performance CSV processing
+                    clicks_str = row.get('Clicks', '').strip()
+                    unique_str = row.get('Unique', '').strip()
+                    flagged_str = row.get('Flagged', '').strip()
+                    execution_date_str = row.get('Execution Date', '').strip()
+                    status = row.get('Status', '').strip()
                     
-                    # Check if this creator-advertiser combination is already declined
-                    existing_decline = db.query(DeclinedCreator).filter(
-                        DeclinedCreator.creator_id == creator.creator_id,
-                        DeclinedCreator.advertiser_id == advertiser_id
-                    ).first()
+                    # Skip rows with missing required performance fields
+                    if not unique_str or not execution_date_str:
+                        continue
                     
-                    if not existing_decline:
-                        # Record the declined creator-advertiser combination
-                        declined_creator = DeclinedCreator(
-                            creator_id=creator.creator_id,
-                            advertiser_id=advertiser_id,
-                            reason=f"Declined from performance upload on {execution_date}"
-                        )
-                        db.add(declined_creator)
-                        declined_count += 1
+                    # Parse numeric values
+                    try:
+                        unique_clicks = int(unique_str) if unique_str else 0
+                        raw_clicks = int(clicks_str) if clicks_str else None
+                    except ValueError:
+                        continue
+                    
+                    # Parse flagged as boolean
+                    flagged = None
+                    if flagged_str.lower() in ['true', '1', 'yes', 'y']:
+                        flagged = True
+                    elif flagged_str.lower() in ['false', '0', 'no', 'n']:
+                        flagged = False
+                    
+                    # Normalize execution date
+                    execution_date = normalize_execution_date(execution_date_str)
+                    if not execution_date:
+                        continue
+                    
+                    # Create click_unique record
+                    click_unique = ClickUnique(
+                        perf_upload_id=perf_upload.perf_upload_id,
+                        creator_id=creator.creator_id,
+                        execution_date=execution_date,
+                        unique_clicks=unique_clicks,
+                        raw_clicks=raw_clicks,
+                        flagged=flagged,
+                        status=status if status else None
+                    )
+                    db.add(click_unique)
+                    inserted_rows += 1
+                    
+                    # Check if status is "declined" and record it (existing logic preserved)
+                    if status and status.lower() == "declined":
+                        # Get advertiser_id from the insertion's campaign
+                        advertiser_id = insertion.campaign.advertiser_id
+                        
+                        # Check if this creator-advertiser combination is already declined
+                        existing_decline = db.query(DeclinedCreator).filter(
+                            DeclinedCreator.creator_id == creator.creator_id,
+                            DeclinedCreator.advertiser_id == advertiser_id
+                        ).first()
+                        
+                        if not existing_decline:
+                            # Record the declined creator-advertiser combination
+                            declined_creator = DeclinedCreator(
+                                creator_id=creator.creator_id,
+                                advertiser_id=advertiser_id,
+                                reason=f"Declined from performance upload on {execution_date}"
+                            )
+                            db.add(declined_creator)
+                            declined_count += 1
+                
+                elif is_decline_csv:
+                    # Decline CSV processing
+                    send_offer = row.get('Send Offer', '').strip()
+                    
+                    # Skip rows with missing Send Offer field
+                    if not send_offer:
+                        continue
+                    
+                    # Check if Send Offer is "declined"
+                    if send_offer.lower() == "declined":
+                        # Get advertiser_id from the insertion's campaign
+                        advertiser_id = insertion.campaign.advertiser_id
+                        
+                        # Check if this creator-advertiser combination is already declined
+                        existing_decline = db.query(DeclinedCreator).filter(
+                            DeclinedCreator.creator_id == creator.creator_id,
+                            DeclinedCreator.advertiser_id == advertiser_id
+                        ).first()
+                        
+                        if not existing_decline:
+                            # Record the declined creator-advertiser combination
+                            declined_creator = DeclinedCreator(
+                                creator_id=creator.creator_id,
+                                advertiser_id=advertiser_id,
+                                reason=f"Declined from decline upload on {datetime.utcnow().date()}"
+                            )
+                            db.add(declined_creator)
+                            declined_count += 1
                 
             except Exception as e:
                 # Skip rows that cause errors
@@ -224,6 +275,7 @@ async def upload_performance_data(
         
         return {
             "perf_upload_id": perf_upload.perf_upload_id,
+            "csv_type": "performance" if is_performance_csv else "decline",
             "inserted_rows": inserted_rows,
             "replaced_rows": replaced_rows,
             "unmatched_count": unmatched_count,
