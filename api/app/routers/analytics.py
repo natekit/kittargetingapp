@@ -982,6 +982,91 @@ async def get_historical_data(
         raise HTTPException(status_code=500, detail=f"Error getting historical data: {str(e)}")
 
 
+@router.get("/debug/clicks")
+async def debug_clicks(
+    campaign_id: Optional[int] = Query(None, description="Campaign ID to debug"),
+    insertion_id: Optional[int] = Query(None, description="Insertion ID to debug"),
+    advertiser_id: Optional[int] = Query(None, description="Advertiser ID to debug"),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Debug endpoint to check click counts and data sources.
+    """
+    print(f"DEBUG: CLICKS - Starting debug with campaign_id={campaign_id}, insertion_id={insertion_id}, advertiser_id={advertiser_id}")
+    
+    # Get all click records with detailed info
+    clicks_query = db.query(
+        ClickUnique.click_id,
+        ClickUnique.creator_id,
+        ClickUnique.unique_clicks,
+        ClickUnique.execution_date,
+        ClickUnique.status,
+        PerfUpload.perf_upload_id,
+        PerfUpload.insertion_id,
+        Insertion.campaign_id,
+        Campaign.advertiser_id,
+        Creator.name,
+        Creator.acct_id
+    ).join(
+        PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+    ).join(
+        Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+    ).join(
+        Campaign, Campaign.campaign_id == Insertion.campaign_id
+    ).join(
+        Creator, Creator.creator_id == ClickUnique.creator_id
+    )
+    
+    # Apply filters
+    if campaign_id:
+        clicks_query = clicks_query.filter(Insertion.campaign_id == campaign_id)
+    if insertion_id:
+        clicks_query = clicks_query.filter(PerfUpload.insertion_id == insertion_id)
+    if advertiser_id:
+        clicks_query = clicks_query.filter(Campaign.advertiser_id == advertiser_id)
+    
+    print(f"DEBUG: CLICKS - Query SQL: {clicks_query}")
+    
+    # Get all click records
+    click_records = clicks_query.all()
+    print(f"DEBUG: CLICKS - Found {len(click_records)} click records")
+    
+    # Calculate totals
+    total_clicks = sum(record.unique_clicks for record in click_records)
+    
+    # Group by creator
+    creator_clicks = {}
+    for record in click_records:
+        creator_id = record.creator_id
+        if creator_id not in creator_clicks:
+            creator_clicks[creator_id] = {
+                'name': record.name,
+                'acct_id': record.acct_id,
+                'total_clicks': 0,
+                'records': []
+            }
+        creator_clicks[creator_id]['total_clicks'] += record.unique_clicks
+        creator_clicks[creator_id]['records'].append({
+            'click_id': record.click_id,
+            'unique_clicks': record.unique_clicks,
+            'execution_date': record.execution_date.isoformat() if record.execution_date else None,
+            'status': record.status,
+            'insertion_id': record.insertion_id,
+            'campaign_id': record.campaign_id
+        })
+    
+    return {
+        "total_click_records": len(click_records),
+        "total_clicks": total_clicks,
+        "creator_breakdown": creator_clicks,
+        "filters_applied": {
+            "campaign_id": campaign_id,
+            "insertion_id": insertion_id,
+            "advertiser_id": advertiser_id
+        }
+    }
+
+
 @router.get("/campaign-forecast")
 async def get_campaign_forecast(
     campaign_id: int = Query(..., description="Campaign ID to forecast"),
