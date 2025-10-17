@@ -459,10 +459,19 @@ async def upload_conversions_data(
                     print(f"DEBUG: Row {row_index + 1} - Flush successful")
                 except Exception as flush_error:
                     print(f"DEBUG: Row {row_index + 1} - Flush failed: {flush_error}")
+                    print(f"DEBUG: Row {row_index + 1} - Conversion data: creator_id={creator.creator_id}, insertion_id={insertion_id}, period={period_range}, conversions={conversions}")
                     raise
                 
                 inserted_rows += 1
                 print(f"DEBUG: Row {row_index + 1} - Successfully processed, inserted_rows now: {inserted_rows}")
+                
+                # Debug: Verify the conversion was actually saved
+                saved_conversion = db.query(Conversion).filter(
+                    Conversion.creator_id == creator.creator_id,
+                    Conversion.insertion_id == insertion_id,
+                    Conversion.period == period_range
+                ).first()
+                print(f"DEBUG: Row {row_index + 1} - Verification: Conversion saved with ID {saved_conversion.conversion_id if saved_conversion else 'NOT FOUND'}")
                 
             except Exception as e:
                 print(f"DEBUG: Row {row_index + 1} - ERROR: {e}")
@@ -473,6 +482,14 @@ async def upload_conversions_data(
                 continue
         
         # All changes are already committed per row
+        
+        # Debug: Final verification of what was actually saved
+        final_conversions = db.query(Conversion).filter(
+            Conversion.conv_upload_id == conv_upload.conv_upload_id
+        ).all()
+        print(f"DEBUG: FINAL - Total conversions saved for this upload: {len(final_conversions)}")
+        for conv in final_conversions:
+            print(f"DEBUG: FINAL - Conversion ID {conv.conversion_id}: Creator {conv.creator_id}, Period {conv.period}, Conversions {conv.conversions}")
         
         return {
             "conv_upload_id": conv_upload.conv_upload_id,
