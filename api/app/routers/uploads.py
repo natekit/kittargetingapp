@@ -188,6 +188,11 @@ async def upload_performance_data(
                     execution_date_str = next((row.get(col, '') for col in csv_columns if col.lower() == 'execution date'), '').strip()
                     status = next((row.get(col, '') for col in csv_columns if col.lower() == 'status'), '').strip()
                     
+                    # Skip rows with "unscheduled" status - these should not be stored or used in forecasts
+                    if status and status.lower() == "unscheduled":
+                        print(f"DEBUG: Skipping unscheduled row for creator {creator.name}")
+                        continue
+                    
                     # Skip rows with missing required performance fields
                     if not unique_str or not execution_date_str:
                         continue
