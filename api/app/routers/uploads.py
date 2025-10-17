@@ -543,6 +543,11 @@ async def cleanup_performance_data(
         db.query(ConvUpload).delete()
         print(f"DEBUG: CLEANUP - Deleted {conv_upload_count} conversion upload records")
         
+        # Delete all decline data
+        declined_count = db.query(DeclinedCreator).count()
+        db.query(DeclinedCreator).delete()
+        print(f"DEBUG: CLEANUP - Deleted {declined_count} declined creator records")
+        
         # Commit the cleanup
         db.commit()
         
@@ -555,7 +560,8 @@ async def cleanup_performance_data(
                 "clicks": click_count,
                 "perf_uploads": perf_upload_count,
                 "conversions": conversion_count,
-                "conv_uploads": conv_upload_count
+                "conv_uploads": conv_upload_count,
+                "declined_creators": declined_count
             }
         }
         
