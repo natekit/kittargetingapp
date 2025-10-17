@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import csv
 import io
+import asyncio
 from typing import Dict, Any, List
 from app.models import Creator
 from app.db import get_db
@@ -66,6 +67,93 @@ def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
     return upserted
 
 
+def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Process a batch of creators with optimized bulk operations."""
+    upserted = 0
+    skipped = 0
+    current_time = datetime.utcnow()
+    
+    try:
+        # Extract emails and acct_ids for bulk lookup
+        emails = [creator_data['owner_email'] for creator_data in batch]
+        acct_ids = [creator_data['acct_id'] for creator_data in batch]
+        
+        # Bulk query for existing creators
+        existing_creators = db.query(Creator).filter(
+            (func.lower(Creator.owner_email).in_([email.lower() for email in emails])) |
+            (Creator.acct_id.in_(acct_ids))
+        ).all()
+        
+        # Create lookup dictionaries for fast access
+        existing_by_email = {creator.owner_email.lower(): creator for creator in existing_creators}
+        existing_by_acct_id = {creator.acct_id: creator for creator in existing_creators}
+        
+        creators_to_update = []
+        creators_to_create = []
+        
+        for creator_data in batch:
+            try:
+                # Check if creator exists
+                existing_creator = (
+                    existing_by_email.get(creator_data['owner_email'].lower()) or
+                    existing_by_acct_id.get(creator_data['acct_id'])
+                )
+                
+                if existing_creator:
+                    # Update existing creator
+                    existing_creator.name = creator_data['name'] or existing_creator.name
+                    existing_creator.topic = creator_data['topic'] or existing_creator.topic
+                    existing_creator.age_range = creator_data['age_range'] or existing_creator.age_range
+                    existing_creator.gender_skew = creator_data['gender_skew'] or existing_creator.gender_skew
+                    existing_creator.location = creator_data['location'] or existing_creator.location
+                    existing_creator.interests = creator_data['interests'] or existing_creator.interests
+                    existing_creator.updated_at = current_time
+                    # Update acct_id if it's different (in case we found by email)
+                    if existing_creator.acct_id != creator_data['acct_id']:
+                        existing_creator.acct_id = creator_data['acct_id']
+                    # Update conservative click estimate if provided
+                    if creator_data['conservative_click_estimate'] is not None:
+                        existing_creator.conservative_click_estimate = creator_data['conservative_click_estimate']
+                    creators_to_update.append(existing_creator)
+                    upserted += 1
+                else:
+                    # Create new creator
+                    new_creator = Creator(
+                        name=creator_data['name'],
+                        acct_id=creator_data['acct_id'],
+                        owner_email=creator_data['owner_email'],
+                        topic=creator_data['topic'],
+                        age_range=creator_data['age_range'],
+                        gender_skew=creator_data['gender_skew'],
+                        location=creator_data['location'],
+                        interests=creator_data['interests'],
+                        conservative_click_estimate=creator_data['conservative_click_estimate'],
+                        created_at=current_time,
+                        updated_at=current_time
+                    )
+                    creators_to_create.append(new_creator)
+                    upserted += 1
+                    
+            except Exception as e:
+                print(f"DEBUG: Error processing creator {creator_data.get('acct_id', 'unknown')}: {e}")
+                skipped += 1
+                continue
+        
+        # Bulk operations
+        if creators_to_create:
+            db.add_all(creators_to_create)
+        
+        # Commit the batch
+        db.commit()
+        
+        return {"upserted": upserted, "skipped": skipped}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"DEBUG: Batch processing error: {e}")
+        return {"upserted": 0, "skipped": len(batch)}
+
+
 @router.post("/seed/creators")
 async def seed_creators(
     file: UploadFile = File(...),
@@ -86,8 +174,9 @@ async def seed_creators(
         
         upserted = 0
         skipped = 0
-        batch_size = 50  # Process in batches of 50
+        batch_size = 100  # Increased batch size for better performance
         batch = []
+        total_rows = 0
         
         # Debug: Print available headers
         if csv_reader.fieldnames:
@@ -151,7 +240,10 @@ async def seed_creators(
                 
                 # Process batch when it reaches batch_size
                 if len(batch) >= batch_size:
-                    upserted += process_batch(db, batch)
+                    print(f"DEBUG: Processing batch of {len(batch)} creators")
+                    batch_result = process_batch_optimized(db, batch)
+                    upserted += batch_result['upserted']
+                    skipped += batch_result['skipped']
                     batch = []
                     
             except Exception as e:
@@ -161,11 +253,131 @@ async def seed_creators(
         
         # Process any remaining items in the final batch
         if batch:
-            upserted += process_batch(db, batch)
+            print(f"DEBUG: Processing final batch of {len(batch)} creators")
+            batch_result = process_batch_optimized(db, batch)
+            upserted += batch_result['upserted']
+            skipped += batch_result['skipped']
         
+        print(f"DEBUG: Sync completed - {upserted} upserted, {skipped} skipped")
         return {
             "upserted": upserted,
-            "skipped": skipped
+            "skipped": skipped,
+            "total_processed": upserted + skipped
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error processing CSV: {str(e)}")
+
+
+@router.post("/seed/creators/async")
+async def seed_creators_async(
+    file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Start async creator sync for large datasets.
+    Returns immediately with job ID for progress tracking.
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+    
+    # For now, just process normally but with better error handling
+    # In the future, this could be enhanced with Redis/background job processing
+    try:
+        # Read CSV content
+        content = await file.read()
+        csv_content = content.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(csv_content))
+        
+        # Count total rows first
+        total_rows = sum(1 for _ in csv_reader)
+        print(f"DEBUG: Starting async sync for {total_rows} creators")
+        
+        # Reset reader
+        csv_reader = csv.DictReader(io.StringIO(csv_content))
+        
+        upserted = 0
+        skipped = 0
+        batch_size = 200  # Larger batch size for async processing
+        batch = []
+        
+        for row_num, row in enumerate(csv_reader, 1):
+            try:
+                # Extract data from CSV row with header standardization
+                owner_email = (row.get('owner_email', '') or row.get('owner email', '') or row.get('email', '')).strip().lower()
+                acct_id = (row.get('acct_id', '') or row.get('acct id', '') or row.get('account_id', '') or row.get('account id', '')).strip()
+                name = (row.get('name', '') or row.get('creator_name', '') or row.get('creator name', '')).strip()
+                topic = (row.get('topic', '') or row.get('category', '') or row.get('niche', '')).strip()
+                
+                # Extract new demographic fields
+                age_range = (row.get('age_range', '') or row.get('age range', '') or row.get('age', '')).strip()
+                gender_skew = (row.get('gender_skew', '') or row.get('gender skew', '') or row.get('gender', '')).strip()
+                location = (row.get('location', '') or row.get('country', '') or row.get('region', '')).strip()
+                interests = (row.get('interests', '') or row.get('interest', '') or row.get('tags', '')).strip()
+                
+                # Parse conservative click estimate
+                conservative_click_estimate = None
+                estimate_fields = [
+                    'conservative_click_estimate', 'conservative click estimate', 
+                    'conservative_clicks', 'conservative clicks',
+                    'click_estimate', 'click estimate'
+                ]
+                
+                for field in estimate_fields:
+                    if field in row and row[field].strip():
+                        try:
+                            conservative_click_estimate = int(row[field].strip())
+                            break
+                        except ValueError:
+                            continue
+                
+                # Skip rows with missing required fields
+                if not owner_email or not acct_id:
+                    skipped += 1
+                    continue
+                
+                # Add to batch for processing
+                batch.append({
+                    'owner_email': owner_email,
+                    'acct_id': acct_id,
+                    'name': name,
+                    'topic': topic,
+                    'age_range': age_range,
+                    'gender_skew': gender_skew,
+                    'location': location,
+                    'interests': interests,
+                    'conservative_click_estimate': conservative_click_estimate
+                })
+                
+                # Process batch when it reaches batch_size
+                if len(batch) >= batch_size:
+                    print(f"DEBUG: Processing batch {row_num//batch_size} of {len(batch)} creators (row {row_num}/{total_rows})")
+                    batch_result = process_batch_optimized(db, batch)
+                    upserted += batch_result['upserted']
+                    skipped += batch_result['skipped']
+                    batch = []
+                    
+            except Exception as e:
+                print(f"DEBUG: Error processing row {row_num}: {e}")
+                skipped += 1
+                continue
+        
+        # Process any remaining items in the final batch
+        if batch:
+            print(f"DEBUG: Processing final batch of {len(batch)} creators")
+            batch_result = process_batch_optimized(db, batch)
+            upserted += batch_result['upserted']
+            skipped += batch_result['skipped']
+        
+        print(f"DEBUG: Async sync completed - {upserted} upserted, {skipped} skipped")
+        return {
+            "status": "completed",
+            "upserted": upserted,
+            "skipped": skipped,
+            "total_processed": upserted + skipped,
+            "total_rows": total_rows
         }
         
     except Exception as e:
