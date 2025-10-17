@@ -100,7 +100,7 @@ export function PerformanceUpload() {
         const hasPerformanceColumns = headers.some(h => h.toLowerCase() === 'clicks') && 
                                     headers.some(h => h.toLowerCase() === 'unique') && 
                                     headers.some(h => h.toLowerCase() === 'execution date');
-        const hasDeclineColumns = headers.some(h => h.toLowerCase() === 'send offer');
+        const hasDeclineColumns = headers.some(h => h.toLowerCase() === 'offer email');
         
         let validation;
         if (hasPerformanceColumns) {
@@ -111,11 +111,11 @@ export function PerformanceUpload() {
         } else if (hasDeclineColumns) {
           // Decline CSV validation
           validation = validateCSVStructure(parseResult.data, [
-            'Creator', 'Send Offer'
+            'Creator', 'Offer email'
           ]);
         } else {
           // Neither type detected
-          setCsvErrors(['CSV must contain either performance columns (Clicks, Unique, Execution Date) or decline columns (Send Offer)']);
+          setCsvErrors(['CSV must contain either performance columns (Clicks, Unique, Execution Date) or decline columns (Offer email)']);
           toast.error('CSV validation failed. Please check the file format.');
           return;
         }

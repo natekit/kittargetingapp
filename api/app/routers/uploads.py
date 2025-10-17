@@ -114,13 +114,13 @@ async def upload_performance_data(
         is_performance_csv = clicks_col and unique_col and execution_date_col
         
         # Check for decline columns (case-insensitive)
-        send_offer_col = any(col.lower() == 'send offer' for col in csv_columns)
-        is_decline_csv = send_offer_col
+        offer_email_col = any(col.lower() == 'offer email' for col in csv_columns)
+        is_decline_csv = offer_email_col
         
         print(f"DEBUG: CSV type detection - Performance: {is_performance_csv}, Decline: {is_decline_csv}")
         
         if not is_performance_csv and not is_decline_csv:
-            raise HTTPException(status_code=400, detail=f"CSV must contain either performance columns (Clicks, Unique, Execution Date) or decline columns (Send Offer). Found columns: {csv_columns}")
+            raise HTTPException(status_code=400, detail=f"CSV must contain either performance columns (Clicks, Unique, Execution Date) or decline columns (Offer email). Found columns: {csv_columns}")
         
         print(f"DEBUG: Final CSV type - Performance: {is_performance_csv}, Decline: {is_decline_csv}")
         
@@ -247,14 +247,14 @@ async def upload_performance_data(
                 
                 elif is_decline_csv:
                     # Decline CSV processing - get column case-insensitively
-                    send_offer = next((row.get(col, '') for col in csv_columns if col.lower() == 'send offer'), '').strip()
+                    offer_email = next((row.get(col, '') for col in csv_columns if col.lower() == 'offer email'), '').strip()
                     
-                    # Skip rows with missing Send Offer field
-                    if not send_offer:
+                    # Skip rows with missing Offer email field
+                    if not offer_email:
                         continue
                     
-                    # Check if Send Offer is "declined"
-                    if send_offer.lower() == "declined":
+                    # Check if Offer email is "declined"
+                    if offer_email.lower() == "declined":
                         # Get advertiser_id from the insertion's campaign
                         advertiser_id = insertion.campaign.advertiser_id
                         
