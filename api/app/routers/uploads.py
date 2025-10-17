@@ -105,13 +105,24 @@ async def upload_performance_data(
         
         # Detect CSV type based on column presence
         csv_columns = csv_reader.fieldnames or []
-        is_performance_csv = 'Clicks' in csv_columns and 'Unique' in csv_columns and 'Execution Date' in csv_columns
-        is_decline_csv = 'Send Offer' in csv_columns
+        print(f"DEBUG: CSV columns found: {csv_columns}")
+        
+        # Check for performance columns (case-insensitive)
+        clicks_col = any(col.lower() == 'clicks' for col in csv_columns)
+        unique_col = any(col.lower() == 'unique' for col in csv_columns)
+        execution_date_col = any(col.lower() == 'execution date' for col in csv_columns)
+        is_performance_csv = clicks_col and unique_col and execution_date_col
+        
+        # Check for decline columns (case-insensitive)
+        send_offer_col = any(col.lower() == 'send offer' for col in csv_columns)
+        is_decline_csv = send_offer_col
+        
+        print(f"DEBUG: CSV type detection - Performance: {is_performance_csv}, Decline: {is_decline_csv}")
         
         if not is_performance_csv and not is_decline_csv:
-            raise HTTPException(status_code=400, detail="CSV must contain either performance columns (Clicks, Unique, Execution Date) or decline columns (Send Offer)")
+            raise HTTPException(status_code=400, detail=f"CSV must contain either performance columns (Clicks, Unique, Execution Date) or decline columns (Send Offer). Found columns: {csv_columns}")
         
-        print(f"DEBUG: Detected CSV type - Performance: {is_performance_csv}, Decline: {is_decline_csv}")
+        print(f"DEBUG: Final CSV type - Performance: {is_performance_csv}, Decline: {is_decline_csv}")
         
         inserted_rows = 0
         unmatched_count = 0
@@ -144,8 +155,8 @@ async def upload_performance_data(
         
         for row in csv_reader:
             try:
-                # Extract data from CSV row
-                creator_field = row.get('Creator', '').strip()
+                # Extract data from CSV row - get Creator column case-insensitively
+                creator_field = next((row.get(col, '') for col in csv_columns if col.lower() == 'creator'), '').strip()
                 
                 # Skip rows with missing creator field
                 if not creator_field:
@@ -170,12 +181,12 @@ async def upload_performance_data(
                 
                 # Process based on CSV type
                 if is_performance_csv:
-                    # Performance CSV processing
-                    clicks_str = row.get('Clicks', '').strip()
-                    unique_str = row.get('Unique', '').strip()
-                    flagged_str = row.get('Flagged', '').strip()
-                    execution_date_str = row.get('Execution Date', '').strip()
-                    status = row.get('Status', '').strip()
+                    # Performance CSV processing - get columns case-insensitively
+                    clicks_str = next((row.get(col, '') for col in csv_columns if col.lower() == 'clicks'), '').strip()
+                    unique_str = next((row.get(col, '') for col in csv_columns if col.lower() == 'unique'), '').strip()
+                    flagged_str = next((row.get(col, '') for col in csv_columns if col.lower() == 'flagged'), '').strip()
+                    execution_date_str = next((row.get(col, '') for col in csv_columns if col.lower() == 'execution date'), '').strip()
+                    status = next((row.get(col, '') for col in csv_columns if col.lower() == 'status'), '').strip()
                     
                     # Skip rows with missing required performance fields
                     if not unique_str or not execution_date_str:
@@ -235,8 +246,8 @@ async def upload_performance_data(
                             declined_count += 1
                 
                 elif is_decline_csv:
-                    # Decline CSV processing
-                    send_offer = row.get('Send Offer', '').strip()
+                    # Decline CSV processing - get column case-insensitively
+                    send_offer = next((row.get(col, '') for col in csv_columns if col.lower() == 'send offer'), '').strip()
                     
                     # Skip rows with missing Send Offer field
                     if not send_offer:
