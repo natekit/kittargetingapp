@@ -67,10 +67,12 @@ def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
     return upserted
 
 
-def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[str, int]:
-    """Process a batch of creators with optimized bulk operations."""
+def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Process a batch of creators with optimized bulk operations and detailed logging."""
     upserted = 0
     skipped = 0
+    skipped_details = []
+    email_conflicts = []
     current_time = datetime.utcnow()
     
     try:
@@ -93,31 +95,59 @@ def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[st
         
         for creator_data in batch:
             try:
-                # Check if creator exists
-                existing_creator = (
-                    existing_by_email.get(creator_data['owner_email'].lower()) or
-                    existing_by_acct_id.get(creator_data['acct_id'])
-                )
+                acct_id = creator_data['acct_id']
+                email = creator_data['owner_email']
+                name = creator_data['name']
                 
-                if existing_creator:
-                    # Update existing creator
-                    existing_creator.name = creator_data['name'] or existing_creator.name
-                    existing_creator.topic = creator_data['topic'] or existing_creator.topic
-                    existing_creator.age_range = creator_data['age_range'] or existing_creator.age_range
-                    existing_creator.gender_skew = creator_data['gender_skew'] or existing_creator.gender_skew
-                    existing_creator.location = creator_data['location'] or existing_creator.location
-                    existing_creator.interests = creator_data['interests'] or existing_creator.interests
-                    existing_creator.updated_at = current_time
-                    # Update acct_id if it's different (in case we found by email)
-                    if existing_creator.acct_id != creator_data['acct_id']:
-                        existing_creator.acct_id = creator_data['acct_id']
-                    # Update conservative click estimate if provided
-                    if creator_data['conservative_click_estimate'] is not None:
-                        existing_creator.conservative_click_estimate = creator_data['conservative_click_estimate']
-                    creators_to_update.append(existing_creator)
-                    upserted += 1
+                # Check for existing creators by both email and acct_id
+                existing_by_email_match = existing_by_email.get(email.lower())
+                existing_by_acct_id_match = existing_by_acct_id.get(acct_id)
+                
+                # Handle conflicts and determine which creator to use
+                if existing_by_email_match and existing_by_acct_id_match:
+                    if existing_by_email_match.creator_id == existing_by_acct_id_match.creator_id:
+                        # Same creator found by both - safe to update
+                        existing_creator = existing_by_email_match
+                        print(f"DEBUG: Updating creator {name} (ID: {existing_creator.creator_id}) - found by both email and acct_id")
+                    else:
+                        # Different creators - conflict!
+                        print(f"DEBUG: CONFLICT - Email {email} belongs to creator {existing_by_email_match.creator_id} but acct_id {acct_id} belongs to creator {existing_by_acct_id_match.creator_id}")
+                        email_conflicts.append({
+                            'email': email,
+                            'acct_id': acct_id,
+                            'name': name,
+                            'email_creator_id': existing_by_email_match.creator_id,
+                            'acct_id_creator_id': existing_by_acct_id_match.creator_id
+                        })
+                        skipped_details.append({
+                            'acct_id': acct_id,
+                            'name': name,
+                            'reason': 'Email and acct_id belong to different existing creators'
+                        })
+                        skipped += 1
+                        continue
+                elif existing_by_acct_id_match:
+                    # Found by acct_id - prioritize acct_id matching
+                    existing_creator = existing_by_acct_id_match
+                    print(f"DEBUG: Updating creator {name} (ID: {existing_creator.creator_id}) - found by acct_id")
+                elif existing_by_email_match:
+                    # Found by email only - check if acct_id would conflict
+                    if existing_by_acct_id.get(acct_id):
+                        print(f"DEBUG: CONFLICT - Email {email} belongs to creator {existing_by_email_match.creator_id} but acct_id {acct_id} already exists for another creator")
+                        skipped_details.append({
+                            'acct_id': acct_id,
+                            'name': name,
+                            'reason': f'Email belongs to creator {existing_by_email_match.creator_id} but acct_id {acct_id} already exists'
+                        })
+                        skipped += 1
+                        continue
+                    else:
+                        # Safe to update - email match, acct_id is new
+                        existing_creator = existing_by_email_match
+                        print(f"DEBUG: Updating creator {name} (ID: {existing_creator.creator_id}) - found by email, updating acct_id to {acct_id}")
                 else:
-                    # Create new creator
+                    # No existing creator found - create new
+                    print(f"DEBUG: Creating new creator {name} (acct_id: {acct_id})")
                     new_creator = Creator(
                         name=creator_data['name'],
                         acct_id=creator_data['acct_id'],
@@ -133,9 +163,36 @@ def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[st
                     )
                     creators_to_create.append(new_creator)
                     upserted += 1
+                    continue
+                
+                # Update existing creator (only non-unique fields)
+                existing_creator.name = creator_data['name'] or existing_creator.name
+                existing_creator.topic = creator_data['topic'] or existing_creator.topic
+                existing_creator.age_range = creator_data['age_range'] or existing_creator.age_range
+                existing_creator.gender_skew = creator_data['gender_skew'] or existing_creator.gender_skew
+                existing_creator.location = creator_data['location'] or existing_creator.location
+                existing_creator.interests = creator_data['interests'] or existing_creator.interests
+                existing_creator.updated_at = current_time
+                
+                # Only update acct_id if it's different and safe to do so
+                if existing_creator.acct_id != creator_data['acct_id']:
+                    existing_creator.acct_id = creator_data['acct_id']
+                    print(f"DEBUG: Updated acct_id from {existing_creator.acct_id} to {creator_data['acct_id']} for creator {name}")
+                
+                # Update conservative click estimate if provided
+                if creator_data['conservative_click_estimate'] is not None:
+                    existing_creator.conservative_click_estimate = creator_data['conservative_click_estimate']
+                
+                creators_to_update.append(existing_creator)
+                upserted += 1
                     
             except Exception as e:
                 print(f"DEBUG: Error processing creator {creator_data.get('acct_id', 'unknown')}: {e}")
+                skipped_details.append({
+                    'acct_id': creator_data.get('acct_id', 'unknown'),
+                    'name': creator_data.get('name', 'unknown'),
+                    'reason': f'Processing error: {str(e)}'
+                })
                 skipped += 1
                 continue
         
@@ -146,12 +203,33 @@ def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[st
         # Commit the batch
         db.commit()
         
-        return {"upserted": upserted, "skipped": skipped}
+        # Log summary
+        if skipped_details:
+            print(f"DEBUG: Skipped {len(skipped_details)} creators:")
+            for detail in skipped_details:
+                print(f"  - {detail['name']} (acct_id: {detail['acct_id']}): {detail['reason']}")
+        
+        if email_conflicts:
+            print(f"DEBUG: Found {len(email_conflicts)} email/acct_id conflicts:")
+            for conflict in email_conflicts:
+                print(f"  - Email {conflict['email']} → Creator {conflict['email_creator_id']}, acct_id {conflict['acct_id']} → Creator {conflict['acct_id_creator_id']}")
+        
+        return {
+            "upserted": upserted, 
+            "skipped": skipped,
+            "skipped_details": skipped_details,
+            "email_conflicts": email_conflicts
+        }
         
     except Exception as e:
         db.rollback()
         print(f"DEBUG: Batch processing error: {e}")
-        return {"upserted": 0, "skipped": len(batch)}
+        return {
+            "upserted": 0, 
+            "skipped": len(batch),
+            "skipped_details": [{"acct_id": "batch_failed", "name": "batch_failed", "reason": f"Batch error: {str(e)}"}],
+            "email_conflicts": []
+        }
 
 
 @router.post("/seed/creators")
@@ -262,7 +340,8 @@ async def seed_creators(
         return {
             "upserted": upserted,
             "skipped": skipped,
-            "total_processed": upserted + skipped
+            "total_processed": upserted + skipped,
+            "message": f"Successfully processed {upserted} creators, skipped {skipped} due to conflicts"
         }
         
     except Exception as e:
@@ -377,7 +456,8 @@ async def seed_creators_async(
             "upserted": upserted,
             "skipped": skipped,
             "total_processed": upserted + skipped,
-            "total_rows": total_rows
+            "total_rows": total_rows,
+            "message": f"Successfully processed {upserted} creators, skipped {skipped} due to conflicts"
         }
         
     except Exception as e:
