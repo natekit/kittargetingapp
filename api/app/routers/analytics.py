@@ -133,6 +133,8 @@ async def get_leaderboard(
     """
     Get creator leaderboard with clicks, conversions, CVR, and optionally expected CPA.
     """
+    print(f"DEBUG: LEADERBOARD - Starting calculation with filters: advertiser_category={advertiser_category}, creator_topic={creator_topic}")
+    
     # Base query for total clicks
     clicks_query = db.query(
         Creator.creator_id,
@@ -153,16 +155,22 @@ async def get_leaderboard(
     
     # Add advertiser category filter if provided
     if advertiser_category:
+        print(f"DEBUG: LEADERBOARD - Adding advertiser category filter: {advertiser_category}")
         clicks_query = clicks_query.filter(Advertiser.category == advertiser_category)
     
     # Add creator topic filter if provided
     if creator_topic:
-        print(f"DEBUG: Filtering by creator topic: {creator_topic}")
+        print(f"DEBUG: LEADERBOARD - Adding creator topic filter: {creator_topic}")
         clicks_query = clicks_query.filter(Creator.topic == creator_topic)
+    
+    # Debug: Print the SQL query for clicks
+    print(f"DEBUG: LEADERBOARD - Clicks query SQL: {clicks_query}")
     
     clicks_subquery = clicks_query.group_by(
         Creator.creator_id, Creator.name, Creator.acct_id
     ).subquery()
+    
+    print(f"DEBUG: LEADERBOARD - Clicks subquery created")
     
     # Query for conversions
     conversions_query = db.query(
@@ -176,16 +184,22 @@ async def get_leaderboard(
     
     # Add advertiser category filter if provided
     if advertiser_category:
+        print(f"DEBUG: LEADERBOARD - Adding advertiser category filter to conversions: {advertiser_category}")
         conversions_query = conversions_query.join(
             Advertiser, Advertiser.advertiser_id == ConvUpload.advertiser_id
         ).filter(Advertiser.category == advertiser_category)
     
     # Add creator topic filter if provided
     if creator_topic:
-        print(f"DEBUG: Filtering conversions by creator topic: {creator_topic}")
+        print(f"DEBUG: LEADERBOARD - Adding creator topic filter to conversions: {creator_topic}")
         conversions_query = conversions_query.filter(Creator.topic == creator_topic)
     
+    # Debug: Print the SQL query for conversions
+    print(f"DEBUG: LEADERBOARD - Conversions query SQL: {conversions_query}")
+    
     conversions_subquery = conversions_query.group_by(Creator.creator_id).subquery()
+    
+    print(f"DEBUG: LEADERBOARD - Conversions subquery created")
     
     # Main query joining clicks and conversions
     main_query = db.query(
@@ -223,12 +237,22 @@ async def get_leaderboard(
         # Sort by CVR descending (highest CVR first)
         main_query = main_query.order_by(desc('cvr'))
     
+    # Debug: Print the final SQL query
+    print(f"DEBUG: LEADERBOARD - Final query SQL: {main_query}")
+    
     # Apply limit
     results = main_query.limit(limit).all()
+    print(f"DEBUG: LEADERBOARD - Found {len(results)} results")
     
     # Convert to response format
     leaderboard = []
-    for row in results:
+    for i, row in enumerate(results):
+        print(f"DEBUG: LEADERBOARD - Creator {i+1}: {row.name} (ID: {row.creator_id})")
+        print(f"  - Total clicks: {row.clicks}")
+        print(f"  - Conversions: {row.conversions}")
+        print(f"  - CVR: {row.cvr:.4f}")
+        if hasattr(row, 'expected_cpa') and row.expected_cpa:
+            print(f"  - Expected CPA: {row.expected_cpa:.2f}")
         creator_stats = CreatorStats(
             creator_id=row.creator_id,
             name=row.name,
@@ -409,7 +433,7 @@ async def create_plan(
     for creator_index, creator in enumerate(creators):
         print(f"DEBUG: Processing creator {creator_index + 1}/{len(creators)}: {creator.name} (ID: {creator.creator_id})")
         # STEP 1: Get click estimates (historical or conservative)
-        print(f"DEBUG: Creator {creator_index + 1} - Getting click estimates")
+        print(f"DEBUG: PLANNING - Creator {creator_index + 1} ({creator.name}) - Getting click estimates")
         clicks_query = db.query(func.sum(ClickUnique.unique_clicks)).join(
             PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
         ).join(
@@ -419,14 +443,17 @@ async def create_plan(
         ).filter(ClickUnique.creator_id == creator.creator_id)
         
         if plan_request.category:
+            print(f"DEBUG: PLANNING - Adding category filter: {plan_request.category}")
             clicks_query = clicks_query.join(
                 Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
             ).filter(Advertiser.category == plan_request.category)
         elif plan_request.advertiser_id:
+            print(f"DEBUG: PLANNING - Adding advertiser filter: {plan_request.advertiser_id}")
             clicks_query = clicks_query.filter(Campaign.advertiser_id == plan_request.advertiser_id)
         
+        print(f"DEBUG: PLANNING - Clicks query SQL: {clicks_query}")
         total_clicks = clicks_query.scalar() or 0
-        print(f"DEBUG: Creator {creator_index + 1} - Total clicks: {total_clicks}")
+        print(f"DEBUG: PLANNING - Creator {creator_index + 1} - Total clicks: {total_clicks}")
         
         # If no historical clicks, use conservative estimate
         if total_clicks == 0:
@@ -440,20 +467,23 @@ async def create_plan(
                 continue
         
         # STEP 2: Get CVR estimates (historical or fallback)
-        print(f"DEBUG: Creator {creator_index + 1} - Getting conversion estimates")
+        print(f"DEBUG: PLANNING - Creator {creator_index + 1} - Getting conversion estimates")
         conversions_query = db.query(func.sum(Conversion.conversions)).join(
             ConvUpload, ConvUpload.conv_upload_id == Conversion.conv_upload_id
         ).filter(Conversion.creator_id == creator.creator_id)
         
         if plan_request.category:
+            print(f"DEBUG: PLANNING - Adding category filter to conversions: {plan_request.category}")
             conversions_query = conversions_query.join(
                 Advertiser, Advertiser.advertiser_id == ConvUpload.advertiser_id
             ).filter(Advertiser.category == plan_request.category)
         elif plan_request.advertiser_id:
+            print(f"DEBUG: PLANNING - Adding advertiser filter to conversions: {plan_request.advertiser_id}")
             conversions_query = conversions_query.filter(ConvUpload.advertiser_id == plan_request.advertiser_id)
         
+        print(f"DEBUG: PLANNING - Conversions query SQL: {conversions_query}")
         total_conversions = conversions_query.scalar() or 0
-        print(f"DEBUG: Creator {creator_index + 1} - Total conversions: {total_conversions}")
+        print(f"DEBUG: PLANNING - Creator {creator_index + 1} - Total conversions: {total_conversions}")
         
         # Calculate CVR with proper fallbacks
         if total_clicks > 0 and total_conversions > 0:
@@ -774,9 +804,9 @@ async def get_historical_data(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get historical performance data for an advertiser or insertion.
+    Get historical performance data for creators.
     """
-    print(f"DEBUG: Historical data request - advertiser_id: {advertiser_id}, insertion_id: {insertion_id}")
+    print(f"DEBUG: HISTORICAL - Starting with advertiser_id={advertiser_id}, insertion_id={insertion_id}")
     
     if not advertiser_id and not insertion_id:
         raise HTTPException(status_code=400, detail="Either advertiser_id or insertion_id must be provided")
@@ -824,35 +854,41 @@ async def get_historical_data(
             
             # Get click data
             if insertion_id:
+                print(f"DEBUG: HISTORICAL - Getting clicks for creator {creator.creator_id} for insertion {insertion_id}")
                 clicks_query = db.query(ClickUnique).join(PerfUpload).filter(
                     ClickUnique.creator_id == creator.creator_id,
                     PerfUpload.insertion_id == insertion_id
                 )
             else:
+                print(f"DEBUG: HISTORICAL - Getting clicks for creator {creator.creator_id} for all insertions of advertiser {advertiser_id}")
                 # Get clicks for all insertions of this advertiser
                 clicks_query = db.query(ClickUnique).join(PerfUpload).join(Insertion).join(Campaign).filter(
                     ClickUnique.creator_id == creator.creator_id,
                     Campaign.advertiser_id == advertiser_id
                 )
             
+            print(f"DEBUG: HISTORICAL - Clicks query SQL: {clicks_query}")
             total_clicks = db.query(func.sum(ClickUnique.unique_clicks)).select_from(clicks_query.subquery()).scalar() or 0
-            print(f"DEBUG: Creator {creator.creator_id} - total clicks: {total_clicks}")
+            print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - total clicks: {total_clicks}")
             
             # Get conversion data
             if insertion_id:
+                print(f"DEBUG: HISTORICAL - Getting conversions for creator {creator.creator_id} for insertion {insertion_id}")
                 conversions_query = db.query(Conversion).join(ConvUpload).filter(
                     Conversion.creator_id == creator.creator_id,
                     ConvUpload.insertion_id == insertion_id
                 )
             else:
+                print(f"DEBUG: HISTORICAL - Getting conversions for creator {creator.creator_id} for all insertions of advertiser {advertiser_id}")
                 # Get conversions for all insertions of this advertiser
                 conversions_query = db.query(Conversion).join(ConvUpload).filter(
                     Conversion.creator_id == creator.creator_id,
                     ConvUpload.advertiser_id == advertiser_id
                 )
             
+            print(f"DEBUG: HISTORICAL - Conversions query SQL: {conversions_query}")
             total_conversions = db.query(func.sum(Conversion.conversions)).select_from(conversions_query.subquery()).scalar() or 0
-            print(f"DEBUG: Creator {creator.creator_id} - total conversions: {total_conversions}")
+            print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - total conversions: {total_conversions}")
             
             # Calculate CVR
             cvr = total_conversions / total_clicks if total_clicks > 0 else 0
