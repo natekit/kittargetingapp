@@ -463,13 +463,30 @@ class SmartMatchingService:
                 median_clicks = placement_clicks[len(placement_clicks) // 2]
                 print(f"DEBUG: Creator {creator.creator_id} - Median clicks per placement: {median_clicks}")
                 
-                # Use median clicks per placement (keep original logic)
-                expected_clicks = median_clicks
-                print(f"DEBUG: Creator {creator.creator_id} - Using median clicks for 1 placement: {expected_clicks}")
+                # Scale up clicks based on budget to ensure better utilization
+                # Use median clicks as base, but scale up for budget utilization
+                base_clicks = median_clicks
+                
+                # Scale factor: higher for better budget utilization
+                # Aim for creators to contribute $50-100 each to budget
+                target_spend_per_creator = 75  # Target $75 per creator
+                scale_factor = max(1.0, target_spend_per_creator / (base_clicks * cpc)) if cpc > 0 else 1.0
+                expected_clicks = int(base_clicks * scale_factor)
+                
+                # Ensure minimum clicks for budget utilization
+                min_clicks = max(50, int(100 / cpc)) if cpc > 0 else 50
+                expected_clicks = max(expected_clicks, min_clicks)
+                
+                print(f"DEBUG: Creator {creator.creator_id} - Scaled clicks: {expected_clicks} (base: {base_clicks}, scale: {scale_factor:.2f})")
             else:
-                # Fallback to conservative estimate
-                expected_clicks = creator.conservative_click_estimate or 100
-                print(f"DEBUG: Creator {creator.creator_id} - No placement data, using conservative estimate: {expected_clicks}")
+                # Fallback to conservative estimate, but scale it up
+                base_clicks = creator.conservative_click_estimate or 100
+                target_spend_per_creator = 75
+                scale_factor = max(1.0, target_spend_per_creator / (base_clicks * cpc)) if cpc > 0 else 1.0
+                expected_clicks = int(base_clicks * scale_factor)
+                min_clicks = max(50, int(100 / cpc)) if cpc > 0 else 50
+                expected_clicks = max(expected_clicks, min_clicks)
+                print(f"DEBUG: Creator {creator.creator_id} - Scaled conservative estimate: {expected_clicks} (base: {base_clicks}, scale: {scale_factor:.2f})")
         else:
             # Fallback to conservative estimate
             expected_clicks = creator.conservative_click_estimate or 100
