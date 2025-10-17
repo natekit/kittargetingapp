@@ -868,6 +868,11 @@ async def get_historical_data(
                 )
             
             print(f"DEBUG: HISTORICAL - Clicks query SQL: {clicks_query}")
+            
+            # Debug: Get individual click records to see what's being summed
+            individual_clicks = db.query(ClickUnique.unique_clicks, ClickUnique.execution_date).select_from(clicks_query.subquery()).all()
+            print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - Individual click records: {individual_clicks}")
+            
             total_clicks = db.query(func.sum(ClickUnique.unique_clicks)).select_from(clicks_query.subquery()).scalar() or 0
             print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - total clicks: {total_clicks}")
             
@@ -887,6 +892,11 @@ async def get_historical_data(
                 )
             
             print(f"DEBUG: HISTORICAL - Conversions query SQL: {conversions_query}")
+            
+            # Debug: Get individual conversion records to see what's being summed
+            individual_conversions = db.query(Conversion.conversions, Conversion.period).select_from(conversions_query.subquery()).all()
+            print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - Individual conversion records: {individual_conversions}")
+            
             total_conversions = db.query(func.sum(Conversion.conversions)).select_from(conversions_query.subquery()).scalar() or 0
             print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - total conversions: {total_conversions}")
             
