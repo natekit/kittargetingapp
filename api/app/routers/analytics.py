@@ -135,12 +135,12 @@ async def get_leaderboard(
     """
     print(f"DEBUG: LEADERBOARD - Starting calculation with filters: advertiser_category={advertiser_category}, creator_topic={creator_topic}")
     
-    # Base query for total clicks
+    # Base query for average clicks per creator
     clicks_query = db.query(
         Creator.creator_id,
         Creator.name,
         Creator.acct_id,
-        func.sum(ClickUnique.unique_clicks).label('total_clicks')
+        func.avg(ClickUnique.unique_clicks).label('avg_clicks')
     ).join(
         ClickUnique, ClickUnique.creator_id == Creator.creator_id
     ).join(
@@ -172,10 +172,10 @@ async def get_leaderboard(
     
     print(f"DEBUG: LEADERBOARD - Clicks subquery created")
     
-    # Query for conversions
+    # Query for average conversions per creator
     conversions_query = db.query(
         Creator.creator_id,
-        func.sum(Conversion.conversions).label('conversions')
+        func.avg(Conversion.conversions).label('avg_conversions')
     ).join(
         Conversion, Conversion.creator_id == Creator.creator_id
     ).join(
@@ -206,13 +206,13 @@ async def get_leaderboard(
         clicks_subquery.c.creator_id,
         clicks_subquery.c.name,
         clicks_subquery.c.acct_id,
-        func.coalesce(clicks_subquery.c.total_clicks, 0).label('clicks'),
-        func.coalesce(conversions_subquery.c.conversions, 0).label('conversions'),
+        func.coalesce(clicks_subquery.c.avg_clicks, 0).label('avg_clicks'),
+        func.coalesce(conversions_subquery.c.avg_conversions, 0).label('avg_conversions'),
         case(
-            (clicks_subquery.c.total_clicks > 0, 
-             func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0)),
+            (clicks_subquery.c.avg_clicks > 0, 
+             func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
             else_=0.0
-        ).label('cvr')
+        ).label('avg_cvr')
     ).outerjoin(
         conversions_subquery, 
         conversions_subquery.c.creator_id == clicks_subquery.c.creator_id
@@ -234,8 +234,8 @@ async def get_leaderboard(
         # Sort by expected CPA (ascending - lower is better)
         main_query = main_query.order_by('expected_cpa')
     else:
-        # Sort by CVR descending (highest CVR first)
-        main_query = main_query.order_by(desc('cvr'))
+        # Sort by average CVR descending (highest average CVR first)
+        main_query = main_query.order_by(desc('avg_cvr'))
     
     # Debug: Print the final SQL query
     print(f"DEBUG: LEADERBOARD - Final query SQL: {main_query}")
@@ -248,18 +248,18 @@ async def get_leaderboard(
     leaderboard = []
     for i, row in enumerate(results):
         print(f"DEBUG: LEADERBOARD - Creator {i+1}: {row.name} (ID: {row.creator_id})")
-        print(f"  - Total clicks: {row.clicks}")
-        print(f"  - Conversions: {row.conversions}")
-        print(f"  - CVR: {row.cvr:.4f}")
+        print(f"  - Average clicks: {row.avg_clicks:.2f}")
+        print(f"  - Average conversions: {row.avg_conversions:.2f}")
+        print(f"  - Average CVR: {row.avg_cvr:.4f}")
         if hasattr(row, 'expected_cpa') and row.expected_cpa:
             print(f"  - Expected CPA: {row.expected_cpa:.2f}")
         creator_stats = CreatorStats(
             creator_id=row.creator_id,
             name=row.name,
             acct_id=row.acct_id,
-            clicks=int(row.clicks),
-            conversions=int(row.conversions),
-            cvr=float(row.cvr)
+            clicks=int(row.avg_clicks),
+            conversions=int(row.avg_conversions),
+            cvr=float(row.avg_cvr)
         )
         
         if cpc and cpc > 0 and hasattr(row, 'expected_cpa'):
