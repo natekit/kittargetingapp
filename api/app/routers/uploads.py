@@ -123,8 +123,10 @@ async def upload_performance_data(
             raise HTTPException(status_code=400, detail=f"CSV must contain either performance columns (Clicks, Unique, Execution Date) or decline columns (Offer email). Found columns: {csv_columns}")
         
         print(f"DEBUG: Final CSV type - Performance: {is_performance_csv}, Decline: {is_decline_csv}")
+        print(f"DEBUG: Starting performance upload for insertion {insertion_id} with duplicate detection enabled")
         
         inserted_rows = 0
+        replaced_rows = 0
         unmatched_count = 0
         unmatched_examples = []
         declined_count = 0
@@ -216,6 +218,19 @@ async def upload_performance_data(
                     if not execution_date:
                         continue
                     
+                    # Check for existing click data for same creator/insertion/date and delete it
+                    existing_clicks = db.query(ClickUnique).join(PerfUpload).filter(
+                        ClickUnique.creator_id == creator.creator_id,
+                        PerfUpload.insertion_id == insertion_id,
+                        ClickUnique.execution_date == execution_date
+                    ).all()
+                    
+                    if existing_clicks:
+                        print(f"DEBUG: Found {len(existing_clicks)} existing click records for creator {creator.creator_id} on {execution_date} - deleting duplicates")
+                        for existing_click in existing_clicks:
+                            db.delete(existing_click)
+                        replaced_rows += len(existing_clicks)
+                    
                     # Create click_unique record
                     click_unique = ClickUnique(
                         perf_upload_id=perf_upload.perf_upload_id,
@@ -288,6 +303,8 @@ async def upload_performance_data(
         
         # Limit unmatched examples to first 10
         unmatched_examples = unmatched_examples[:10]
+        
+        print(f"DEBUG: Upload completed - Inserted: {inserted_rows}, Replaced: {replaced_rows}, Unmatched: {unmatched_count}, Declined: {declined_count}")
         
         return {
             "perf_upload_id": perf_upload.perf_upload_id,
@@ -466,3 +483,56 @@ async def upload_conversions_data(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error processing CSV: {str(e)}")
+
+
+@router.post("/cleanup/performance-data")
+async def cleanup_performance_data(
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Clean up all performance and conversion data for testing.
+    WARNING: This will delete ALL click and conversion data!
+    """
+    try:
+        print("DEBUG: CLEANUP - Starting performance data cleanup")
+        
+        # Delete all click data
+        click_count = db.query(ClickUnique).count()
+        db.query(ClickUnique).delete()
+        print(f"DEBUG: CLEANUP - Deleted {click_count} click records")
+        
+        # Delete all performance uploads
+        perf_upload_count = db.query(PerfUpload).count()
+        db.query(PerfUpload).delete()
+        print(f"DEBUG: CLEANUP - Deleted {perf_upload_count} performance upload records")
+        
+        # Delete all conversion data
+        conversion_count = db.query(Conversion).count()
+        db.query(Conversion).delete()
+        print(f"DEBUG: CLEANUP - Deleted {conversion_count} conversion records")
+        
+        # Delete all conversion uploads
+        conv_upload_count = db.query(ConvUpload).count()
+        db.query(ConvUpload).delete()
+        print(f"DEBUG: CLEANUP - Deleted {conv_upload_count} conversion upload records")
+        
+        # Commit the cleanup
+        db.commit()
+        
+        print("DEBUG: CLEANUP - Performance data cleanup completed successfully")
+        
+        return {
+            "status": "success",
+            "message": "Performance data cleanup completed",
+            "deleted_records": {
+                "clicks": click_count,
+                "perf_uploads": perf_upload_count,
+                "conversions": conversion_count,
+                "conv_uploads": conv_upload_count
+            }
+        }
+        
+    except Exception as e:
+        db.rollback()
+        print(f"DEBUG: CLEANUP - Error during cleanup: {e}")
+        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
