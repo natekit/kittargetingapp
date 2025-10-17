@@ -113,9 +113,12 @@ async def get_filter_options(db: Session = Depends(get_db)) -> Dict[str, List[st
         Creator.topic.isnot(None)
     ).distinct().all()
     
+    topics_list = [topic[0] for topic in creator_topics if topic[0]]
+    print(f"DEBUG: Available creator topics: {topics_list}")
+    
     return {
         "advertiser_categories": [cat[0] for cat in advertiser_categories if cat[0]],
-        "creator_topics": [topic[0] for topic in creator_topics if topic[0]]
+        "creator_topics": topics_list
     }
 
 
@@ -154,6 +157,7 @@ async def get_leaderboard(
     
     # Add creator topic filter if provided
     if creator_topic:
+        print(f"DEBUG: Filtering by creator topic: {creator_topic}")
         clicks_query = clicks_query.filter(Creator.topic == creator_topic)
     
     clicks_subquery = clicks_query.group_by(
@@ -178,9 +182,8 @@ async def get_leaderboard(
     
     # Add creator topic filter if provided
     if creator_topic:
-        conversions_query = conversions_query.join(
-            Creator, Creator.creator_id == Conversion.creator_id
-        ).filter(Creator.topic == creator_topic)
+        print(f"DEBUG: Filtering conversions by creator topic: {creator_topic}")
+        conversions_query = conversions_query.filter(Creator.topic == creator_topic)
     
     conversions_subquery = conversions_query.group_by(Creator.creator_id).subquery()
     
