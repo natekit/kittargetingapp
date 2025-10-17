@@ -149,13 +149,18 @@ class ApiClient {
   }
 
   // Analytics
-  async getLeaderboard(category?: string, limit = 50, cpc?: number): Promise<CreatorStats[]> {
+  async getLeaderboard(advertiser_category?: string, creator_topic?: string, limit = 50, cpc?: number): Promise<CreatorStats[]> {
     const params = new URLSearchParams();
-    if (category) params.append('category', category);
+    if (advertiser_category) params.append('advertiser_category', advertiser_category);
+    if (creator_topic) params.append('creator_topic', creator_topic);
     params.append('limit', limit.toString());
     if (cpc) params.append('cpc', cpc.toString());
     
     return this.request<CreatorStats[]>(`/api/leaderboard?${params}`);
+  }
+
+  async getFilterOptions(): Promise<{ advertiser_categories: string[]; creator_topics: string[] }> {
+    return this.request<{ advertiser_categories: string[]; creator_topics: string[] }>('/api/filter-options');
   }
 
   async createPlan(data: {

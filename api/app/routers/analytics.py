@@ -98,9 +98,31 @@ async def get_declined_creators(
     ]
 
 
+@router.get("/filter-options")
+async def get_filter_options(db: Session = Depends(get_db)) -> Dict[str, List[str]]:
+    """
+    Get available filter options for leaderboard dropdowns.
+    """
+    # Get advertiser categories
+    advertiser_categories = db.query(Advertiser.category).filter(
+        Advertiser.category.isnot(None)
+    ).distinct().all()
+    
+    # Get creator topics
+    creator_topics = db.query(Creator.topic).filter(
+        Creator.topic.isnot(None)
+    ).distinct().all()
+    
+    return {
+        "advertiser_categories": [cat[0] for cat in advertiser_categories if cat[0]],
+        "creator_topics": [topic[0] for topic in creator_topics if topic[0]]
+    }
+
+
 @router.get("/leaderboard")
 async def get_leaderboard(
-    category: Optional[str] = Query(None, description="Category filter"),
+    advertiser_category: Optional[str] = Query(None, description="Advertiser category filter"),
+    creator_topic: Optional[str] = Query(None, description="Creator topic filter"),
     limit: int = Query(50, description="Number of results to return"),
     cpc: Optional[float] = Query(None, description="CPC for expected CPA calculation"),
     db: Session = Depends(get_db)
@@ -108,12 +130,12 @@ async def get_leaderboard(
     """
     Get creator leaderboard with clicks, conversions, CVR, and optionally expected CPA.
     """
-    # Base query for average clicks per insertion
+    # Base query for total clicks
     clicks_query = db.query(
         Creator.creator_id,
         Creator.name,
         Creator.acct_id,
-        func.avg(ClickUnique.unique_clicks).label('avg_clicks_per_insertion')
+        func.sum(ClickUnique.unique_clicks).label('total_clicks')
     ).join(
         ClickUnique, ClickUnique.creator_id == Creator.creator_id
     ).join(
@@ -126,9 +148,13 @@ async def get_leaderboard(
         Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
     )
     
-    # Add category filter if provided
-    if category:
-        clicks_query = clicks_query.filter(Advertiser.category == category)
+    # Add advertiser category filter if provided
+    if advertiser_category:
+        clicks_query = clicks_query.filter(Advertiser.category == advertiser_category)
+    
+    # Add creator topic filter if provided
+    if creator_topic:
+        clicks_query = clicks_query.filter(Creator.topic == creator_topic)
     
     clicks_subquery = clicks_query.group_by(
         Creator.creator_id, Creator.name, Creator.acct_id
@@ -144,11 +170,17 @@ async def get_leaderboard(
         ConvUpload, ConvUpload.conv_upload_id == Conversion.conv_upload_id
     )
     
-    # Add category filter if provided
-    if category:
+    # Add advertiser category filter if provided
+    if advertiser_category:
         conversions_query = conversions_query.join(
             Advertiser, Advertiser.advertiser_id == ConvUpload.advertiser_id
-        ).filter(Advertiser.category == category)
+        ).filter(Advertiser.category == advertiser_category)
+    
+    # Add creator topic filter if provided
+    if creator_topic:
+        conversions_query = conversions_query.join(
+            Creator, Creator.creator_id == Conversion.creator_id
+        ).filter(Creator.topic == creator_topic)
     
     conversions_subquery = conversions_query.group_by(Creator.creator_id).subquery()
     
@@ -157,11 +189,11 @@ async def get_leaderboard(
         clicks_subquery.c.creator_id,
         clicks_subquery.c.name,
         clicks_subquery.c.acct_id,
-        func.coalesce(clicks_subquery.c.avg_clicks_per_insertion, 0).label('clicks'),
+        func.coalesce(clicks_subquery.c.total_clicks, 0).label('clicks'),
         func.coalesce(conversions_subquery.c.conversions, 0).label('conversions'),
         case(
-            (clicks_subquery.c.avg_clicks_per_insertion > 0, 
-             func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks_per_insertion, 0)),
+            (clicks_subquery.c.total_clicks > 0, 
+             func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0)),
             else_=0.0
         ).label('cvr')
     ).outerjoin(
@@ -173,9 +205,9 @@ async def get_leaderboard(
     if cpc and cpc > 0:
         main_query = main_query.add_columns(
             case(
-                (clicks_subquery.c.avg_clicks_per_insertion > 0,
+                (clicks_subquery.c.total_clicks > 0,
                  cpc / func.nullif(
-                     func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks_per_insertion, 0),
+                     func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
                      0
                  )),
                 else_=None

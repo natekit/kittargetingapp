@@ -10,16 +10,22 @@ export function LeaderboardPage() {
   const [creators, setCreators] = useState<CreatorStats[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({
-    category: '',
+    advertiser_category: '',
+    creator_topic: '',
     limit: 50,
     cpc: '',
+  });
+  const [filterOptions, setFilterOptions] = useState({
+    advertiser_categories: [] as string[],
+    creator_topics: [] as string[],
   });
 
   const fetchLeaderboard = async () => {
     setLoading(true);
     try {
       const data = await api.getLeaderboard(
-        filters.category || undefined,
+        filters.advertiser_category || undefined,
+        filters.creator_topic || undefined,
         filters.limit,
         filters.cpc ? parseFloat(filters.cpc) : undefined
       );
@@ -31,7 +37,17 @@ export function LeaderboardPage() {
     }
   };
 
+  const fetchFilterOptions = async () => {
+    try {
+      const options = await api.getFilterOptions();
+      setFilterOptions(options);
+    } catch (error) {
+      console.error('Error fetching filter options:', error);
+    }
+  };
+
   useEffect(() => {
+    fetchFilterOptions();
     fetchLeaderboard();
   }, []);
 
@@ -89,19 +105,39 @@ export function LeaderboardPage() {
         </CardHeader>
         <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="space-y-2">
-                <label htmlFor="category" className="block text-sm font-semibold text-gray-700">
-                  Category Filter
+                <label htmlFor="advertiser_category" className="block text-sm font-semibold text-gray-700">
+                  Advertiser Category
                 </label>
-                <Input
-                  id="category"
-                  type="text"
-                  value={filters.category}
-                  onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-                  placeholder="e.g., News, Sports, Tech"
-                  className="h-11 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                />
+                <select
+                  id="advertiser_category"
+                  value={filters.advertiser_category}
+                  onChange={(e) => setFilters({ ...filters, advertiser_category: e.target.value })}
+                  className="h-11 w-full px-3 py-2 border border-gray-200 rounded-md focus:border-blue-500 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Categories</option>
+                  {filterOptions.advertiser_categories.map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="creator_topic" className="block text-sm font-semibold text-gray-700">
+                  Creator Topic
+                </label>
+                <select
+                  id="creator_topic"
+                  value={filters.creator_topic}
+                  onChange={(e) => setFilters({ ...filters, creator_topic: e.target.value })}
+                  className="h-11 w-full px-3 py-2 border border-gray-200 rounded-md focus:border-blue-500 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Topics</option>
+                  {filterOptions.creator_topics.map(topic => (
+                    <option key={topic} value={topic}>{topic}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-2">
