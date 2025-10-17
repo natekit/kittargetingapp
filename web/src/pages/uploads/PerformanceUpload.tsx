@@ -95,10 +95,30 @@ export function PerformanceUpload() {
         // Parse CSV with proper handling
         const parseResult = await parseCSVFile(selectedFile);
         
-        // Validate structure for performance data
-        const validation = validateCSVStructure(parseResult.data, [
-          'Creator', 'Clicks', 'Unique', 'Flagged', 'Execution Date', 'Status'
-        ]);
+        // Detect CSV type and validate accordingly
+        const headers = parseResult.data[0] || [];
+        const hasPerformanceColumns = headers.some(h => h.toLowerCase() === 'clicks') && 
+                                    headers.some(h => h.toLowerCase() === 'unique') && 
+                                    headers.some(h => h.toLowerCase() === 'execution date');
+        const hasDeclineColumns = headers.some(h => h.toLowerCase() === 'send offer');
+        
+        let validation;
+        if (hasPerformanceColumns) {
+          // Performance CSV validation
+          validation = validateCSVStructure(parseResult.data, [
+            'Creator', 'Clicks', 'Unique', 'Flagged', 'Execution Date', 'Status'
+          ]);
+        } else if (hasDeclineColumns) {
+          // Decline CSV validation
+          validation = validateCSVStructure(parseResult.data, [
+            'Creator', 'Send Offer'
+          ]);
+        } else {
+          // Neither type detected
+          setCsvErrors(['CSV must contain either performance columns (Clicks, Unique, Execution Date) or decline columns (Send Offer)']);
+          toast.error('CSV validation failed. Please check the file format.');
+          return;
+        }
         
         if (!validation.isValid) {
           setCsvErrors(validation.errors);
