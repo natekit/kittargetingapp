@@ -881,7 +881,7 @@ async def get_historical_data(
                 print(f"DEBUG: HISTORICAL - Getting conversions for creator {creator.creator_id} for insertion {insertion_id}")
                 conversions_query = db.query(Conversion).join(ConvUpload).filter(
                     Conversion.creator_id == creator.creator_id,
-                    ConvUpload.insertion_id == insertion_id
+                    Conversion.insertion_id == insertion_id
                 )
             else:
                 print(f"DEBUG: HISTORICAL - Getting conversions for creator {creator.creator_id} for all insertions of advertiser {advertiser_id}")
