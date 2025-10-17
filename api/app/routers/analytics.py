@@ -894,7 +894,10 @@ async def get_historical_data(
             print(f"DEBUG: HISTORICAL - Conversions query SQL: {conversions_query}")
             
             # Debug: Get individual conversion records to see what's being summed
-            individual_conversions = db.query(Conversion.conversions, Conversion.period).select_from(conversions_query.subquery()).all()
+            individual_conversions = db.query(Conversion.conversions, Conversion.period).filter(
+                Conversion.creator_id == creator.creator_id,
+                Conversion.insertion_id == insertion_id
+            ).all()
             print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - Individual conversion records: {individual_conversions}")
             
             # Debug: Check what conversion records exist for this creator and insertion
@@ -904,7 +907,10 @@ async def get_historical_data(
             ).all()
             print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - All conversion records in DB: {all_conversions}")
             
-            total_conversions = db.query(func.sum(Conversion.conversions)).select_from(conversions_query.subquery()).scalar() or 0
+            total_conversions = db.query(func.sum(Conversion.conversions)).filter(
+                Conversion.creator_id == creator.creator_id,
+                Conversion.insertion_id == insertion_id
+            ).scalar() or 0
             print(f"DEBUG: HISTORICAL - Creator {creator.creator_id} - total conversions: {total_conversions}")
             
             # Calculate CVR
