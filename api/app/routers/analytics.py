@@ -865,9 +865,15 @@ async def create_smart_plan(
                 if current_placements >= 3:
                     continue
                 
-                expected_clicks = performance_data.get('expected_clicks', 100)
+                if performance_data:
+                    expected_clicks = performance_data.get('expected_clicks', 100)
+                    expected_conversions = performance_data.get('expected_conversions', 10)
+                else:
+                    # Fallback for creators without performance data (Tier 2, 4)
+                    expected_clicks = creator.conservative_click_estimate or 100
+                    expected_conversions = expected_clicks * 0.06  # Use default CVR
+                
                 expected_spend = cpc * expected_clicks
-                expected_conversions = performance_data.get('expected_conversions', 10)
                 
                 if expected_spend <= remaining_budget:
                     print(f"DEBUG: Adding additional creator {creator.name} (placement {current_placements + 1}) with remaining budget")
@@ -875,15 +881,15 @@ async def create_smart_plan(
                         creator_id=creator.creator_id,
                         name=creator.name,
                         acct_id=creator.acct_id,
-                        expected_cvr=performance_data.get('expected_cvr', 0.06),
-                        expected_cpa=performance_data.get('expected_cpa', 10.0),
+                        expected_cvr=performance_data.get('expected_cvr', 0.06) if performance_data else 0.06,
+                        expected_cpa=performance_data.get('expected_cpa', 10.0) if performance_data else 10.0,
                         clicks_per_day=expected_clicks / plan_request.horizon_days,
                         expected_clicks=expected_clicks,
                         expected_spend=expected_spend,
                         expected_conversions=expected_conversions,
                         value_ratio=creator_data['combined_score'],
-                        recommended_placements=performance_data.get('recommended_placements', 1),
-                        median_clicks_per_placement=performance_data.get('median_clicks_per_placement')
+                        recommended_placements=performance_data.get('recommended_placements', 1) if performance_data else 1,
+                        median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
                     ))
                     total_spend += expected_spend
                     total_conversions += expected_conversions
