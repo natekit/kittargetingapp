@@ -578,36 +578,103 @@ async def create_plan(
         creator_stats.sort(key=lambda x: x['value_ratio'], reverse=True)
         print("DEBUG: Sorted by value ratio (descending)")
     
-    # Greedy allocation
-    print("DEBUG: Starting greedy allocation")
+    # Enhanced greedy allocation with placement limits and budget maximization
+    print("DEBUG: Starting enhanced greedy allocation with placement limits")
     picked_creators = []
     total_spend = 0.0
     total_conversions = 0.0
+    remaining_budget = plan_request.budget
+    creator_placement_counts = {}  # Track placements per creator
     
+    # First pass: Add full allocations with placement limits
     for alloc_index, creator_stat in enumerate(creator_stats):
-        print(f"DEBUG: Allocation {alloc_index + 1}/{len(creator_stats)} - {creator_stat['name']} (spend: {creator_stat['expected_spend']}, current total: {total_spend}, budget: {plan_request.budget})")
-        if total_spend + creator_stat['expected_spend'] <= plan_request.budget:
+        creator_id = creator_stat['creator_id']
+        current_placements = creator_placement_counts.get(creator_id, 0)
+        
+        print(f"DEBUG: Allocation {alloc_index + 1}/{len(creator_stats)} - {creator_stat['name']} (spend: {creator_stat['expected_spend']}, placements: {current_placements}/3, remaining budget: {remaining_budget})")
+        
+        # Check placement limit (max 3 per creator)
+        if current_placements >= 3:
+            print(f"DEBUG: Skipping {creator_stat['name']} - already at max placements (3)")
+            continue
+            
+        if creator_stat['expected_spend'] <= remaining_budget:
             # Can fit full allocation
-            print(f"DEBUG: Adding full allocation for {creator_stat['name']}")
+            print(f"DEBUG: Adding full allocation for {creator_stat['name']} (placement {current_placements + 1})")
             picked_creators.append(PlanCreator(**creator_stat))
             total_spend += creator_stat['expected_spend']
             total_conversions += creator_stat['expected_conversions']
+            remaining_budget -= creator_stat['expected_spend']
+            creator_placement_counts[creator_id] = current_placements + 1
         else:
-            # Pro-rate the last creator
-            remaining_budget = plan_request.budget - total_spend
-            print(f"DEBUG: Pro-rating {creator_stat['name']} - remaining budget: {remaining_budget}")
-            if remaining_budget > 0:
-                pro_ratio = remaining_budget / creator_stat['expected_spend']
-                pro_rated_stat = creator_stat.copy()
-                pro_rated_stat['expected_clicks'] *= pro_ratio
-                pro_rated_stat['expected_spend'] = remaining_budget
-                pro_rated_stat['expected_conversions'] *= pro_ratio
+            print(f"DEBUG: Skipping {creator_stat['name']} - too expensive (${creator_stat['expected_spend']:.2f} > ${remaining_budget:.2f})")
+    
+    # Second pass: Continue adding creators until budget is fully utilized
+    print(f"DEBUG: First pass complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
+    
+    # Keep trying to fill budget with additional creators
+    max_iterations = len(creator_stats) * 3  # Prevent infinite loops
+    iteration = 0
+    
+    while remaining_budget > 0 and iteration < max_iterations:
+        iteration += 1
+        print(f"DEBUG: Budget filling iteration {iteration} - ${remaining_budget:.2f} remaining")
+        
+        added_creator = False
+        
+        # Try to find creators that can fit in remaining budget
+        for creator_stat in creator_stats:
+            creator_id = creator_stat['creator_id']
+            current_placements = creator_placement_counts.get(creator_id, 0)
+            
+            # Check placement limit
+            if current_placements >= 3:
+                continue
                 
-                print(f"DEBUG: Pro-rated spend: {pro_rated_stat['expected_spend']}, conversions: {pro_rated_stat['expected_conversions']}")
-                picked_creators.append(PlanCreator(**pro_rated_stat))
-                total_spend += remaining_budget
-                total_conversions += pro_rated_stat['expected_conversions']
+            if creator_stat['expected_spend'] <= remaining_budget:
+                print(f"DEBUG: Adding additional creator {creator_stat['name']} (placement {current_placements + 1}) with remaining budget")
+                picked_creators.append(PlanCreator(**creator_stat))
+                total_spend += creator_stat['expected_spend']
+                total_conversions += creator_stat['expected_conversions']
+                remaining_budget -= creator_stat['expected_spend']
+                creator_placement_counts[creator_id] = current_placements + 1
+                added_creator = True
+                break
+        
+        # If no full creators fit, try pro-rating the best remaining creator
+        if not added_creator and remaining_budget > 0:
+            for creator_stat in creator_stats:
+                creator_id = creator_stat['creator_id']
+                current_placements = creator_placement_counts.get(creator_id, 0)
+                
+                # Check placement limit
+                if current_placements >= 3:
+                    continue
+                    
+                if creator_stat['expected_spend'] > remaining_budget:
+                    pro_ratio = remaining_budget / creator_stat['expected_spend']
+                    if pro_ratio > 0.1:  # Only pro-rate if we can get at least 10% of the allocation
+                        print(f"DEBUG: Pro-rating {creator_stat['name']} (placement {current_placements + 1}) - ratio: {pro_ratio:.2f}")
+                        pro_rated_stat = creator_stat.copy()
+                        pro_rated_stat['expected_clicks'] *= pro_ratio
+                        pro_rated_stat['expected_spend'] = remaining_budget
+                        pro_rated_stat['expected_conversions'] *= pro_ratio
+                        
+                        print(f"DEBUG: Pro-rated spend: {pro_rated_stat['expected_spend']}, conversions: {pro_rated_stat['expected_conversions']}")
+                        picked_creators.append(PlanCreator(**pro_rated_stat))
+                        total_spend += remaining_budget
+                        total_conversions += pro_rated_stat['expected_conversions']
+                        creator_placement_counts[creator_id] = current_placements + 1
+                        remaining_budget = 0
+                        added_creator = True
+                        break
+        
+        # If no creators were added, break to prevent infinite loop
+        if not added_creator:
+            print(f"DEBUG: No more creators can be added with remaining budget ${remaining_budget:.2f}")
             break
+    
+    print(f"DEBUG: Final budget utilization - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining, {len(picked_creators)} total placements")
     
     # Calculate blended CPA
     blended_cpa = total_spend / total_conversions if total_conversions > 0 else 0.0
@@ -720,17 +787,31 @@ async def create_smart_plan(
         total_spend = 0.0
         total_conversions = 0.0
         
+        # Enhanced allocation with placement limits and budget maximization
+        creator_placement_counts = {}  # Track placements per creator
+        remaining_budget = plan_request.budget
+        
+        # First pass: Add full allocations with placement limits
         for creator_data in matched_creators:
             creator = creator_data['creator']
             performance_data = creator_data['performance_data']
+            creator_id = creator.creator_id
+            current_placements = creator_placement_counts.get(creator_id, 0)
             
             # Calculate expected metrics
             expected_clicks = performance_data.get('expected_clicks', 100)
             expected_spend = cpc * expected_clicks
             expected_conversions = performance_data.get('expected_conversions', 10)
             
+            print(f"DEBUG: Smart allocation - {creator.name} (spend: ${expected_spend:.2f}, placements: {current_placements}/3, remaining budget: ${remaining_budget:.2f})")
+            
+            # Check placement limit (max 3 per creator)
+            if current_placements >= 3:
+                print(f"DEBUG: Skipping {creator.name} - already at max placements (3)")
+                continue
+            
             # Check if we can fit this creator in budget
-            if total_spend + expected_spend <= plan_request.budget:
+            if expected_spend <= remaining_budget:
                 # Full allocation
                 picked_creators.append(PlanCreator(
                     creator_id=creator.creator_id,
@@ -748,33 +829,114 @@ async def create_smart_plan(
                 ))
                 total_spend += expected_spend
                 total_conversions += expected_conversions
-                print(f"DEBUG: Added creator {creator.name} - spend: ${expected_spend:.2f}, rationale: {creator_data['matching_rationale']}")
+                remaining_budget -= expected_spend
+                creator_placement_counts[creator_id] = current_placements + 1
+                print(f"DEBUG: Added creator {creator.name} (placement {current_placements + 1}) - spend: ${expected_spend:.2f}, rationale: {creator_data['matching_rationale']}")
             else:
-                # Pro-rate the last creator
-                remaining_budget = plan_request.budget - total_spend
-                if remaining_budget > 0:
-                    pro_ratio = remaining_budget / expected_spend
-                    pro_rated_clicks = expected_clicks * pro_ratio
-                    pro_rated_conversions = expected_conversions * pro_ratio
-                    
+                print(f"DEBUG: Skipping {creator.name} - too expensive (${expected_spend:.2f} > ${remaining_budget:.2f})")
+        
+        # Second pass: Continue adding creators until budget is fully utilized
+        print(f"DEBUG: First pass complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
+        
+        # Keep trying to fill budget with additional creators
+        max_iterations = len(matched_creators) * 3  # Prevent infinite loops
+        iteration = 0
+        
+        while remaining_budget > 0 and iteration < max_iterations:
+            iteration += 1
+            print(f"DEBUG: Smart budget filling iteration {iteration} - ${remaining_budget:.2f} remaining")
+            
+            added_creator = False
+            
+            # Try to find creators that can fit in remaining budget
+            for creator_data in matched_creators:
+                creator = creator_data['creator']
+                performance_data = creator_data['performance_data']
+                creator_id = creator.creator_id
+                current_placements = creator_placement_counts.get(creator_id, 0)
+                
+                # Check placement limit
+                if current_placements >= 3:
+                    continue
+                
+                expected_clicks = performance_data.get('expected_clicks', 100)
+                expected_spend = cpc * expected_clicks
+                expected_conversions = performance_data.get('expected_conversions', 10)
+                
+                if expected_spend <= remaining_budget:
+                    print(f"DEBUG: Adding additional creator {creator.name} (placement {current_placements + 1}) with remaining budget")
                     picked_creators.append(PlanCreator(
                         creator_id=creator.creator_id,
                         name=creator.name,
                         acct_id=creator.acct_id,
                         expected_cvr=performance_data.get('expected_cvr', 0.06),
                         expected_cpa=performance_data.get('expected_cpa', 10.0),
-                        clicks_per_day=pro_rated_clicks / plan_request.horizon_days,
-                        expected_clicks=pro_rated_clicks,
-                        expected_spend=remaining_budget,
-                        expected_conversions=pro_rated_conversions,
+                        clicks_per_day=expected_clicks / plan_request.horizon_days,
+                        expected_clicks=expected_clicks,
+                        expected_spend=expected_spend,
+                        expected_conversions=expected_conversions,
                         value_ratio=creator_data['combined_score'],
                         recommended_placements=performance_data.get('recommended_placements', 1),
                         median_clicks_per_placement=performance_data.get('median_clicks_per_placement')
                     ))
-                    total_spend += remaining_budget
-                    total_conversions += pro_rated_conversions
-                    print(f"DEBUG: Pro-rated creator {creator.name} - spend: ${remaining_budget:.2f}, rationale: {creator_data['matching_rationale']}")
+                    total_spend += expected_spend
+                    total_conversions += expected_conversions
+                    remaining_budget -= expected_spend
+                    creator_placement_counts[creator_id] = current_placements + 1
+                    added_creator = True
+                    break
+            
+            # If no full creators fit, try pro-rating the best remaining creator
+            if not added_creator and remaining_budget > 0:
+                for creator_data in matched_creators:
+                    creator = creator_data['creator']
+                    performance_data = creator_data['performance_data']
+                    creator_id = creator.creator_id
+                    current_placements = creator_placement_counts.get(creator_id, 0)
+                    
+                    # Check placement limit
+                    if current_placements >= 3:
+                        continue
+                    
+                    expected_clicks = performance_data.get('expected_clicks', 100)
+                    expected_spend = cpc * expected_clicks
+                    expected_conversions = performance_data.get('expected_conversions', 10)
+                    
+                    if expected_spend > remaining_budget:
+                        pro_ratio = remaining_budget / expected_spend
+                        if pro_ratio > 0.1:  # Only pro-rate if we can get at least 10% of the allocation
+                            print(f"DEBUG: Pro-rating {creator.name} (placement {current_placements + 1}) - ratio: {pro_ratio:.2f}")
+                            pro_rated_clicks = expected_clicks * pro_ratio
+                            pro_rated_conversions = expected_conversions * pro_ratio
+                            
+                            picked_creators.append(PlanCreator(
+                                creator_id=creator.creator_id,
+                                name=creator.name,
+                                acct_id=creator.acct_id,
+                                expected_cvr=performance_data.get('expected_cvr', 0.06),
+                                expected_cpa=performance_data.get('expected_cpa', 10.0),
+                                clicks_per_day=pro_rated_clicks / plan_request.horizon_days,
+                                expected_clicks=pro_rated_clicks,
+                                expected_spend=remaining_budget,
+                                expected_conversions=pro_rated_conversions,
+                                value_ratio=creator_data['combined_score'],
+                                recommended_placements=performance_data.get('recommended_placements', 1),
+                                median_clicks_per_placement=performance_data.get('median_clicks_per_placement')
+                            ))
+                            total_spend += remaining_budget
+                            total_conversions += pro_rated_conversions
+                            creator_placement_counts[creator_id] = current_placements + 1
+                            print(f"DEBUG: Pro-rated creator {creator.name} (placement {current_placements + 1}) - spend: ${remaining_budget:.2f}, rationale: {creator_data['matching_rationale']}")
+                            remaining_budget = 0
+                            added_creator = True
+                            break
+            
+            # If no creators were added, break to prevent infinite loop
+            if not added_creator:
+                print(f"DEBUG: No more creators can be added with remaining budget ${remaining_budget:.2f}")
                 break
+        
+        print(f"DEBUG: Smart plan final budget utilization - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining, {len(picked_creators)} total placements")
         
         # Calculate final metrics
         blended_cpa = total_spend / total_conversions if total_conversions > 0 else 0.0
