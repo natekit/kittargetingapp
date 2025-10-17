@@ -466,12 +466,14 @@ async def upload_conversions_data(
                 print(f"DEBUG: Row {row_index + 1} - Successfully processed, inserted_rows now: {inserted_rows}")
                 
                 # Debug: Verify the conversion was actually saved
+                # Note: We can't directly compare DATERANGE with string, so we'll check by creator and insertion
                 saved_conversion = db.query(Conversion).filter(
                     Conversion.creator_id == creator.creator_id,
-                    Conversion.insertion_id == insertion_id,
-                    Conversion.period == period_range
+                    Conversion.insertion_id == insertion_id
                 ).first()
                 print(f"DEBUG: Row {row_index + 1} - Verification: Conversion saved with ID {saved_conversion.conversion_id if saved_conversion else 'NOT FOUND'}")
+                if saved_conversion:
+                    print(f"DEBUG: Row {row_index + 1} - Verification: Period {saved_conversion.period}, Conversions {saved_conversion.conversions}")
                 
             except Exception as e:
                 print(f"DEBUG: Row {row_index + 1} - ERROR: {e}")
