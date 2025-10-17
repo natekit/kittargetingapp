@@ -353,7 +353,7 @@ class SmartMatchingService:
             
             # Calculate performance score
             performance_data = creator_data['performance_data']
-            if performance_data['has_performance']:
+            if performance_data and performance_data.get('has_performance', False):
                 performance_score = 1.0
             else:
                 performance_score = 0.0
