@@ -475,6 +475,14 @@ async def upload_conversions_data(
                 if saved_conversion:
                     print(f"DEBUG: Row {row_index + 1} - Verification: Period {saved_conversion.period}, Conversions {saved_conversion.conversions}")
                 
+                # Debug: Check if the conversion actually exists in the database after commit
+                db.commit()  # Ensure the conversion is committed
+                committed_conversion = db.query(Conversion).filter(
+                    Conversion.creator_id == creator.creator_id,
+                    Conversion.insertion_id == insertion_id
+                ).first()
+                print(f"DEBUG: Row {row_index + 1} - Post-commit verification: Conversion ID {committed_conversion.conversion_id if committed_conversion else 'NOT FOUND'}")
+                
             except Exception as e:
                 print(f"DEBUG: Row {row_index + 1} - ERROR: {e}")
                 print(f"DEBUG: Row {row_index + 1} - Exception type: {type(e)}")
