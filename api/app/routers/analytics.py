@@ -804,7 +804,7 @@ async def create_smart_plan(
                 expected_conversions = performance_data.get('expected_conversions', 10)
             else:
                 # Try to get clicks from other campaigns first
-                other_campaigns_clicks = self._get_other_campaigns_clicks(creator, plan_request.advertiser_id, plan_request.category, db)
+                other_campaigns_clicks = _get_other_campaigns_clicks(creator, plan_request.advertiser_id, plan_request.category, db)
                 if other_campaigns_clicks > 0:
                     expected_clicks = other_campaigns_clicks
                     expected_conversions = expected_clicks * 0.06  # Use default CVR
@@ -921,7 +921,7 @@ async def create_smart_plan(
                         expected_conversions = performance_data.get('expected_conversions', 10)
                     else:
                         # Try to get clicks from other campaigns first
-                        other_campaigns_clicks = self._get_other_campaigns_clicks(creator, plan_request.advertiser_id, plan_request.category, db)
+                        other_campaigns_clicks = _get_other_campaigns_clicks(creator, plan_request.advertiser_id, plan_request.category, db)
                         if other_campaigns_clicks > 0:
                             expected_clicks = other_campaigns_clicks
                             expected_conversions = expected_clicks * 0.06  # Use default CVR
@@ -988,15 +988,36 @@ async def create_smart_plan(
         print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Smart matching failed: {str(e)}")
     
-    def _get_other_campaigns_clicks(self, creator: Creator, advertiser_id: Optional[int], category: Optional[str], db: Session) -> int:
-        """Get click estimates from other campaigns for this creator."""
-        from sqlalchemy import func, and_
-        from app.models import ClickUnique, PerfUpload, Insertion, Campaign, Advertiser
-        
-        print(f"DEBUG: Getting other campaigns clicks for creator {creator.creator_id}")
-        
-        # Build query for clicks from OTHER campaigns
-        other_campaigns_query = db.query(func.sum(ClickUnique.unique_clicks)).join(
+def _get_other_campaigns_clicks(creator: Creator, advertiser_id: Optional[int], category: Optional[str], db: Session) -> int:
+    """Get click estimates from other campaigns for this creator."""
+    from sqlalchemy import func, and_
+    from app.models import ClickUnique, PerfUpload, Insertion, Campaign, Advertiser
+    
+    print(f"DEBUG: Getting other campaigns clicks for creator {creator.creator_id}")
+    
+    # Build query for clicks from OTHER campaigns
+    other_campaigns_query = db.query(func.sum(ClickUnique.unique_clicks)).join(
+        PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+    ).join(
+        Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+    ).join(
+        Campaign, Campaign.campaign_id == Insertion.campaign_id
+    ).filter(ClickUnique.creator_id == creator.creator_id)
+    
+    # Exclude the current advertiser/category
+    if advertiser_id:
+        other_campaigns_query = other_campaigns_query.filter(Campaign.advertiser_id != advertiser_id)
+    elif category:
+        other_campaigns_query = other_campaigns_query.join(
+            Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+        ).filter(Advertiser.category != category)
+    
+    total_other_clicks = other_campaigns_query.scalar() or 0
+    print(f"DEBUG: Creator {creator.creator_id} - Total other campaigns clicks: {total_other_clicks}")
+    
+    if total_other_clicks > 0:
+        # Get individual placement clicks from other campaigns to calculate median
+        placement_clicks_query = db.query(ClickUnique.unique_clicks).join(
             PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
         ).join(
             Insertion, Insertion.insertion_id == PerfUpload.insertion_id
@@ -1004,45 +1025,24 @@ async def create_smart_plan(
             Campaign, Campaign.campaign_id == Insertion.campaign_id
         ).filter(ClickUnique.creator_id == creator.creator_id)
         
-        # Exclude the current advertiser/category
+        # Exclude current advertiser/category
         if advertiser_id:
-            other_campaigns_query = other_campaigns_query.filter(Campaign.advertiser_id != advertiser_id)
+            placement_clicks_query = placement_clicks_query.filter(Campaign.advertiser_id != advertiser_id)
         elif category:
-            other_campaigns_query = other_campaigns_query.join(
+            placement_clicks_query = placement_clicks_query.join(
                 Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
             ).filter(Advertiser.category != category)
         
-        total_other_clicks = other_campaigns_query.scalar() or 0
-        print(f"DEBUG: Creator {creator.creator_id} - Total other campaigns clicks: {total_other_clicks}")
+        placement_clicks = [row[0] for row in placement_clicks_query.all() if row[0] is not None]
         
-        if total_other_clicks > 0:
-            # Get individual placement clicks from other campaigns to calculate median
-            placement_clicks_query = db.query(ClickUnique.unique_clicks).join(
-                PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
-            ).join(
-                Insertion, Insertion.insertion_id == PerfUpload.insertion_id
-            ).join(
-                Campaign, Campaign.campaign_id == Insertion.campaign_id
-            ).filter(ClickUnique.creator_id == creator.creator_id)
-            
-            # Exclude current advertiser/category
-            if advertiser_id:
-                placement_clicks_query = placement_clicks_query.filter(Campaign.advertiser_id != advertiser_id)
-            elif category:
-                placement_clicks_query = placement_clicks_query.join(
-                    Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
-                ).filter(Advertiser.category != category)
-            
-            placement_clicks = [row[0] for row in placement_clicks_query.all() if row[0] is not None]
-            
-            if placement_clicks:
-                # Calculate median clicks per placement from other campaigns
-                placement_clicks.sort()
-                median_clicks = placement_clicks[len(placement_clicks) // 2]
-                print(f"DEBUG: Creator {creator.creator_id} - Median clicks from other campaigns: {median_clicks}")
-                return median_clicks
-        
-        return 0
+        if placement_clicks:
+            # Calculate median clicks per placement from other campaigns
+            placement_clicks.sort()
+            median_clicks = placement_clicks[len(placement_clicks) // 2]
+            print(f"DEBUG: Creator {creator.creator_id} - Median clicks from other campaigns: {median_clicks}")
+            return median_clicks
+    
+    return 0
 
 
 @router.get("/historical-data")
