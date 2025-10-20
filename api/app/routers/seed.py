@@ -12,6 +12,58 @@ from datetime import datetime
 router = APIRouter()
 
 
+def wipe_all_creators(db: Session) -> int:
+    """
+    Completely wipe all creator data and related records.
+    Returns the number of creators that were deleted.
+    """
+    try:
+        print("DEBUG: Wiping all creator data...")
+        
+        # Get count before deletion for logging
+        total_creators = db.query(Creator).count()
+        print(f"DEBUG: Found {total_creators} creators to delete")
+        
+        # Delete all related data first (in order of dependencies)
+        # 1. Delete creator topics
+        topics_deleted = db.query(CreatorTopic).delete()
+        print(f"DEBUG: Deleted {topics_deleted} creator topics")
+        
+        # 2. Delete creator keywords
+        keywords_deleted = db.query(CreatorKeyword).delete()
+        print(f"DEBUG: Deleted {keywords_deleted} creator keywords")
+        
+        # 3. Delete click data
+        clicks_deleted = db.query(ClickUnique).delete()
+        print(f"DEBUG: Deleted {clicks_deleted} click records")
+        
+        # 4. Delete conversion data
+        conversions_deleted = db.query(Conversion).delete()
+        print(f"DEBUG: Deleted {conversions_deleted} conversion records")
+        
+        # 5. Delete placements
+        placements_deleted = db.query(Placement).delete()
+        print(f"DEBUG: Deleted {placements_deleted} placement records")
+        
+        # 6. Delete declined creators
+        declined_deleted = db.query(DeclinedCreator).delete()
+        print(f"DEBUG: Deleted {declined_deleted} declined creator records")
+        
+        # 7. Finally delete all creators
+        creators_deleted = db.query(Creator).delete()
+        print(f"DEBUG: Deleted {creators_deleted} creator records")
+        
+        # Commit the wipe
+        db.commit()
+        print(f"DEBUG: Successfully wiped all creator data")
+        return creators_deleted
+        
+    except Exception as e:
+        print(f"DEBUG: Error wiping creator data: {e}")
+        db.rollback()
+        raise e
+
+
 def safe_delete_creator(db: Session, creator_id: int) -> bool:
     """
     Safely delete a creator and all related data.
@@ -282,7 +334,7 @@ def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[st
 @router.post("/seed/creators")
 async def seed_creators(
     file: UploadFile = File(...),
-    sync_mode: str = Form("upsert"),  # "upsert" or "full_sync"
+    sync_mode: str = Form("upsert"),  # "upsert", "full_sync", or "full_reset"
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
@@ -291,6 +343,7 @@ async def seed_creators(
     sync_mode options:
     - "upsert": Only add/update creators (existing behavior)
     - "full_sync": Add/update creators AND remove creators not in CSV
+    - "full_reset": Wipe all creators and reload from CSV (recommended)
     """
     print(f"DEBUG: Sync mode received: {sync_mode}")
     
@@ -298,6 +351,13 @@ async def seed_creators(
         raise HTTPException(status_code=400, detail="File must be a CSV")
     
     try:
+        # Handle full reset mode - wipe everything first
+        wiped = 0
+        if sync_mode == "full_reset":
+            print(f"DEBUG: Full reset mode - wiping all existing creator data...")
+            wiped = wipe_all_creators(db)
+            print(f"DEBUG: Wiped {wiped} creators, now loading from CSV...")
+        
         # Read CSV content
         content = await file.read()
         csv_content = content.decode('utf-8')
@@ -429,13 +489,16 @@ async def seed_creators(
                 else:
                     print(f"DEBUG: Failed to delete creator {creator.name} (acct_id: {creator.acct_id})")
         
-        print(f"DEBUG: Sync completed - {upserted} upserted, {skipped} skipped, {deleted} deleted")
+        print(f"DEBUG: Sync completed - {upserted} upserted, {skipped} skipped, {deleted} deleted, {wiped} wiped")
         return {
             "upserted": upserted,
             "skipped": skipped,
             "deleted": deleted,
+            "wiped": wiped,
             "total_processed": upserted + skipped,
-            "message": f"Successfully processed {upserted} creators, skipped {skipped} due to conflicts" + (f", deleted {deleted} creators not in CSV" if deleted > 0 else "")
+            "message": f"Successfully processed {upserted} creators, skipped {skipped} due to conflicts" + 
+                      (f", deleted {deleted} creators not in CSV" if deleted > 0 else "") +
+                      (f", wiped {wiped} existing creators" if wiped > 0 else "")
         }
         
     except Exception as e:
