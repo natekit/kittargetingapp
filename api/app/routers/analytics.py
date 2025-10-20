@@ -424,7 +424,7 @@ async def create_plan(
     # Calculate expected CVR for each creator
     print("DEBUG: Starting creator stats calculation")
     creator_stats = []
-    global_baseline_cvr = 0.005  # 0.5%
+    global_baseline_cvr = 0.025  # 2.5%
     
     # Use advertiser average CVR if provided, otherwise use global baseline
     advertiser_cvr = plan_request.advertiser_avg_cvr if plan_request.advertiser_avg_cvr is not None else global_baseline_cvr
@@ -765,7 +765,7 @@ async def create_smart_plan(
             cpc=cpc,
             target_cpa=plan_request.target_cpa,
             horizon_days=plan_request.horizon_days,
-            advertiser_avg_cvr=plan_request.advertiser_avg_cvr or 0.06,
+            advertiser_avg_cvr=plan_request.advertiser_avg_cvr or 0.025,
             include_acct_ids=plan_request.include_acct_ids,
             exclude_acct_ids=plan_request.exclude_acct_ids
         )
@@ -807,11 +807,11 @@ async def create_smart_plan(
                 other_campaigns_clicks = _get_other_campaigns_clicks(creator, plan_request.advertiser_id, plan_request.category, db)
                 if other_campaigns_clicks > 0:
                     expected_clicks = other_campaigns_clicks
-                    expected_conversions = expected_clicks * 0.06  # Use default CVR
+                    expected_conversions = expected_clicks * (plan_request.advertiser_avg_cvr or 0.025)  # Use advertiser CVR or 2.5% default
                 else:
                     # Final fallback to conservative estimate
                     expected_clicks = creator.conservative_click_estimate or 100
-                    expected_conversions = expected_clicks * 0.06  # Use default CVR
+                    expected_conversions = expected_clicks * (plan_request.advertiser_avg_cvr or 0.025)  # Use advertiser CVR or 2.5% default
             
             expected_spend = cpc * expected_clicks
             
@@ -829,8 +829,8 @@ async def create_smart_plan(
                     creator_id=creator.creator_id,
                     name=creator.name,
                     acct_id=creator.acct_id,
-                    expected_cvr=performance_data.get('expected_cvr', 0.06) if performance_data else 0.06,
-                    expected_cpa=performance_data.get('expected_cpa', 10.0) if performance_data else 10.0,
+                    expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
+                    expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
                     clicks_per_day=expected_clicks / plan_request.horizon_days,
                     expected_clicks=expected_clicks,
                     expected_spend=expected_spend,
@@ -877,7 +877,7 @@ async def create_smart_plan(
                 else:
                     # Fallback for creators without performance data (Tier 2, 4)
                     expected_clicks = creator.conservative_click_estimate or 100
-                    expected_conversions = expected_clicks * 0.06  # Use default CVR
+                    expected_conversions = expected_clicks * (plan_request.advertiser_avg_cvr or 0.025)  # Use advertiser CVR or 2.5% default
                 
                 expected_spend = cpc * expected_clicks
                 
@@ -887,8 +887,8 @@ async def create_smart_plan(
                         creator_id=creator.creator_id,
                         name=creator.name,
                         acct_id=creator.acct_id,
-                        expected_cvr=performance_data.get('expected_cvr', 0.06) if performance_data else 0.06,
-                        expected_cpa=performance_data.get('expected_cpa', 10.0) if performance_data else 10.0,
+                        expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
+                        expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
                         clicks_per_day=expected_clicks / plan_request.horizon_days,
                         expected_clicks=expected_clicks,
                         expected_spend=expected_spend,
@@ -924,11 +924,11 @@ async def create_smart_plan(
                         other_campaigns_clicks = _get_other_campaigns_clicks(creator, plan_request.advertiser_id, plan_request.category, db)
                         if other_campaigns_clicks > 0:
                             expected_clicks = other_campaigns_clicks
-                            expected_conversions = expected_clicks * 0.06  # Use default CVR
+                            expected_conversions = expected_clicks * (plan_request.advertiser_avg_cvr or 0.025)  # Use advertiser CVR or 2.5% default
                         else:
                             # Final fallback to conservative estimate
                             expected_clicks = creator.conservative_click_estimate or 100
-                            expected_conversions = expected_clicks * 0.06  # Use default CVR
+                            expected_conversions = expected_clicks * (plan_request.advertiser_avg_cvr or 0.025)  # Use advertiser CVR or 2.5% default
                     
                     expected_spend = cpc * expected_clicks
                     
@@ -943,8 +943,8 @@ async def create_smart_plan(
                                 creator_id=creator.creator_id,
                                 name=creator.name,
                                 acct_id=creator.acct_id,
-                                expected_cvr=performance_data.get('expected_cvr', 0.06) if performance_data else 0.06,
-                                expected_cpa=performance_data.get('expected_cpa', 10.0) if performance_data else 10.0,
+                                expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
+                                expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
                                 clicks_per_day=pro_rated_clicks / plan_request.horizon_days,
                                 expected_clicks=pro_rated_clicks,
                                 expected_spend=remaining_budget,

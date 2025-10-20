@@ -33,7 +33,7 @@ class SmartMatchingService:
         cpc: float = 0.0,
         target_cpa: Optional[float] = None,
         horizon_days: int = 30,
-        advertiser_avg_cvr: float = 0.06,
+        advertiser_avg_cvr: float = 0.025,
         include_acct_ids: Optional[str] = None,
         exclude_acct_ids: Optional[str] = None
     ) -> List[Dict[str, Any]]:
