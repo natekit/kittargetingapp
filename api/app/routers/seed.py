@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import csv
@@ -282,7 +282,7 @@ def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[st
 @router.post("/seed/creators")
 async def seed_creators(
     file: UploadFile = File(...),
-    sync_mode: str = "upsert",  # "upsert" or "full_sync"
+    sync_mode: str = Form("upsert"),  # "upsert" or "full_sync"
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
@@ -292,6 +292,8 @@ async def seed_creators(
     - "upsert": Only add/update creators (existing behavior)
     - "full_sync": Add/update creators AND remove creators not in CSV
     """
+    print(f"DEBUG: Sync mode received: {sync_mode}")
+    
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
     
