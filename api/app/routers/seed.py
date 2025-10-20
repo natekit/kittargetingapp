@@ -5,11 +5,58 @@ import csv
 import io
 import asyncio
 from typing import Dict, Any, List
-from app.models import Creator
+from app.models import Creator, CreatorTopic, CreatorKeyword, ClickUnique, Conversion, Placement
 from app.db import get_db
 from datetime import datetime
 
 router = APIRouter()
+
+
+def safe_delete_creator(db: Session, creator_id: int) -> bool:
+    """
+    Safely delete a creator and all related data.
+    Returns True if deletion was successful, False otherwise.
+    """
+    try:
+        print(f"DEBUG: Deleting creator {creator_id} and related data...")
+        
+        # Delete in order of dependencies (child tables first)
+        # 1. Delete creator topics
+        topics_deleted = db.query(CreatorTopic).filter(CreatorTopic.creator_id == creator_id).delete()
+        print(f"DEBUG: Deleted {topics_deleted} creator topics")
+        
+        # 2. Delete creator keywords
+        keywords_deleted = db.query(CreatorKeyword).filter(CreatorKeyword.creator_id == creator_id).delete()
+        print(f"DEBUG: Deleted {keywords_deleted} creator keywords")
+        
+        # 3. Delete click data
+        clicks_deleted = db.query(ClickUnique).filter(ClickUnique.creator_id == creator_id).delete()
+        print(f"DEBUG: Deleted {clicks_deleted} click records")
+        
+        # 4. Delete conversion data
+        conversions_deleted = db.query(Conversion).filter(Conversion.creator_id == creator_id).delete()
+        print(f"DEBUG: Deleted {conversions_deleted} conversion records")
+        
+        # 5. Delete placements
+        placements_deleted = db.query(Placement).filter(Placement.creator_id == creator_id).delete()
+        print(f"DEBUG: Deleted {placements_deleted} placement records")
+        
+        # 6. Finally delete the creator
+        creator_deleted = db.query(Creator).filter(Creator.creator_id == creator_id).delete()
+        print(f"DEBUG: Deleted {creator_deleted} creator record")
+        
+        if creator_deleted > 0:
+            db.commit()
+            print(f"DEBUG: Successfully deleted creator {creator_id}")
+            return True
+        else:
+            print(f"DEBUG: Creator {creator_id} not found for deletion")
+            return False
+            
+    except Exception as e:
+        print(f"DEBUG: Error deleting creator {creator_id}: {e}")
+        db.rollback()
+        return False
 
 
 def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
@@ -235,11 +282,15 @@ def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[st
 @router.post("/seed/creators")
 async def seed_creators(
     file: UploadFile = File(...),
+    sync_mode: str = "upsert",  # "upsert" or "full_sync"
     db: Session = Depends(get_db)
 ) -> Dict[str, int]:
     """
     Seed creators from CSV file.
-    Upserts on owner_email (case-insensitive) and acct_id (unique).
+    
+    sync_mode options:
+    - "upsert": Only add/update creators (existing behavior)
+    - "full_sync": Add/update creators AND remove creators not in CSV
     """
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -336,12 +387,53 @@ async def seed_creators(
             upserted += batch_result['upserted']
             skipped += batch_result['skipped']
         
-        print(f"DEBUG: Sync completed - {upserted} upserted, {skipped} skipped")
+        deleted = 0
+        
+        # Handle full sync mode - delete creators not in CSV
+        if sync_mode == "full_sync":
+            print(f"DEBUG: Full sync mode - identifying creators to delete...")
+            
+            # Get all creator IDs from CSV (we need to re-read the CSV for this)
+            csv_content_rewind = content.decode('utf-8')
+            csv_reader_rewind = csv.DictReader(io.StringIO(csv_content_rewind))
+            
+            csv_acct_ids = set()
+            csv_emails = set()
+            
+            for row in csv_reader_rewind:
+                acct_id = (row.get('acct_id', '') or row.get('acct id', '') or row.get('account_id', '') or row.get('account id', '')).strip()
+                owner_email = (row.get('owner_email', '') or row.get('owner email', '') or row.get('email', '')).strip().lower()
+                
+                if acct_id:
+                    csv_acct_ids.add(acct_id)
+                if owner_email:
+                    csv_emails.add(owner_email)
+            
+            print(f"DEBUG: CSV contains {len(csv_acct_ids)} acct_ids and {len(csv_emails)} emails")
+            
+            # Find creators in database that are NOT in CSV
+            creators_to_delete = db.query(Creator).filter(
+                ~Creator.acct_id.in_(csv_acct_ids) & 
+                ~func.lower(Creator.owner_email).in_(csv_emails)
+            ).all()
+            
+            print(f"DEBUG: Found {len(creators_to_delete)} creators to delete")
+            
+            # Delete creators not in CSV
+            for creator in creators_to_delete:
+                if safe_delete_creator(db, creator.creator_id):
+                    deleted += 1
+                    print(f"DEBUG: Deleted creator {creator.name} (acct_id: {creator.acct_id})")
+                else:
+                    print(f"DEBUG: Failed to delete creator {creator.name} (acct_id: {creator.acct_id})")
+        
+        print(f"DEBUG: Sync completed - {upserted} upserted, {skipped} skipped, {deleted} deleted")
         return {
             "upserted": upserted,
             "skipped": skipped,
+            "deleted": deleted,
             "total_processed": upserted + skipped,
-            "message": f"Successfully processed {upserted} creators, skipped {skipped} due to conflicts"
+            "message": f"Successfully processed {upserted} creators, skipped {skipped} due to conflicts" + (f", deleted {deleted} creators not in CSV" if deleted > 0 else "")
         }
         
     except Exception as e:
