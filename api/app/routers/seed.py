@@ -284,7 +284,7 @@ async def seed_creators(
     file: UploadFile = File(...),
     sync_mode: str = "upsert",  # "upsert" or "full_sync"
     db: Session = Depends(get_db)
-) -> Dict[str, int]:
+) -> Dict[str, Any]:
     """
     Seed creators from CSV file.
     
