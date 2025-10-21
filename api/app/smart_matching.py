@@ -97,45 +97,28 @@ class SmartMatchingService:
         if not target_demographics and advertiser_id:
             target_demographics = self._get_advertiser_demographics(advertiser_id)
         
-        # Tier 1: Historical performance creators
-        tier1_creators = self._get_tier1_creators(
+        # Three-phase allocation: Phase 1 (CPA), Phase 2 (Cross-CVR), Phase 3 (Smart Matching)
+        three_phase_creators = self._get_three_phase_creators(
             all_creators, advertiser_id, category, cpc, target_cpa, 
             horizon_days, advertiser_avg_cvr
         )
-        print(f"DEBUG: Tier 1: {len(tier1_creators)} creators with historical performance")
         
-        # Always run all tiers to get maximum creators for budget utilization
-        # Tier 2: Topic/keyword matches to high performers
-        tier2_creators = self._get_tier2_creators(
-            all_creators, tier1_creators, advertiser_id, category
-        )
-        print(f"DEBUG: Tier 2: {len(tier2_creators)} creators with topic/keyword matches")
+        # Separate by phase for logging
+        phase1_creators = [c for c in three_phase_creators if c['phase'] == 1]
+        phase2_creators = [c for c in three_phase_creators if c['phase'] == 2]
+        phase3_creators = [c for c in three_phase_creators if c['phase'] == 3]
         
-        # Tier 3: Demographic matches
-        tier3_creators = self._get_tier3_creators(
-            all_creators, target_demographics, advertiser_id, category
-        )
-        print(f"DEBUG: Tier 3: {len(tier3_creators)} creators with demographic matches")
+        print(f"DEBUG: Phase 1 (Same advertiser/category): {len(phase1_creators)} creators")
+        print(f"DEBUG: Phase 2 (Cross-performance): {len(phase2_creators)} creators")
+        print(f"DEBUG: Phase 3 (Smart matching): {len(phase3_creators)} creators")
         
-        # Tier 4: Similar creators to high performers
-        tier4_creators = self._get_tier4_creators(
-            all_creators, tier1_creators, advertiser_id, category
-        )
-        print(f"DEBUG: Tier 4: {len(tier4_creators)} creators similar to high performers")
-        
-        # Combine and deduplicate
-        all_matched_creators = self._combine_creator_tiers(
-            tier1_creators, tier2_creators, tier3_creators, tier4_creators
-        )
-        print(f"DEBUG: Combined tiers: {len(all_matched_creators)} total creators")
-        
-        # Calculate final scores and rationale
+        # Calculate final scores and rationale for three-phase creators
         final_creators = self._calculate_final_scores(
-            all_matched_creators, target_demographics, cpc, horizon_days
+            three_phase_creators, target_demographics, cpc, horizon_days
         )
         
-        # Sort by combined score
-        final_creators.sort(key=lambda x: x['combined_score'], reverse=True)
+        # Sort by tier first, then by combined score within each tier
+        final_creators.sort(key=lambda x: (x['tier'], -x['combined_score']))
         
         print(f"DEBUG: Final selection: {len(final_creators)} creators")
         return final_creators
@@ -164,7 +147,7 @@ class SmartMatchingService:
             'target_interests': advertiser.target_interests
         }
     
-    def _get_tier1_creators(
+    def _get_three_phase_creators(
         self, 
         creators: List[Creator], 
         advertiser_id: Optional[int], 
@@ -174,8 +157,8 @@ class SmartMatchingService:
         horizon_days: int,
         advertiser_avg_cvr: float
     ) -> List[Dict[str, Any]]:
-        """Tier 1: Creators with historical performance data."""
-        tier1_creators = []
+        """Three-phase allocation: Phase 1 (CPA), Phase 2 (Cross-CVR), Phase 3 (Smart Matching)."""
+        all_creators = []
         
         # Batch performance data query for all creators
         creator_ids = [creator.creator_id for creator in creators]
@@ -184,9 +167,13 @@ class SmartMatchingService:
         for creator in creators:
             # Get performance data from batch results
             perf_data = batch_performance_data.get(creator.creator_id, {
+                'phase': 3,
                 'total_clicks': 0,
                 'total_conversions': 0,
-                'historical_cvr': 0.0
+                'historical_cvr': 0.0,
+                'cross_clicks': 0,
+                'cross_conversions': 0,
+                'cross_cvr': 0.0
             })
             
             # Create performance data in the expected format
@@ -194,22 +181,48 @@ class SmartMatchingService:
                 creator, perf_data, cpc, horizon_days, advertiser_avg_cvr
             )
             
-            if performance_data['has_performance']:
-                # Check CPA constraint if provided
+            # Determine tier and rationale based on phase
+            if performance_data['phase'] == 1:
+                tier = 1
+                rationale = 'Historical performance data for same advertiser/category'
+                # Sort by CPA (lower is better)
+                sort_key = performance_data['expected_cpa'] if performance_data['expected_cpa'] is not None else float('inf')
+            elif performance_data['phase'] == 2:
+                tier = 2
+                rationale = 'Cross-performance data from other advertisers/categories'
+                # Sort by CVR (higher is better)
+                sort_key = -performance_data['expected_cvr']  # Negative for descending sort
+            else:
+                tier = 3
+                rationale = 'No historical performance data - using smart matching'
+                # Sort by combined score (higher is better)
+                sort_key = -performance_data.get('combined_score', 0)  # Negative for descending sort
+            
+            creator_data = {
+                'creator': creator,
+                'tier': tier,
+                'phase': performance_data['phase'],
+                'performance_data': performance_data,
+                'matching_rationale': rationale,
+                'sort_key': sort_key,
+                'performance_score': 1.0 if performance_data['phase'] <= 2 else 0.0,
+                'demographic_score': 0.0,
+                'topic_score': 0.0,
+                'similarity_score': 0.0
+            }
+            
+            # Apply CPA constraint for Phase 1 only
+            if performance_data['phase'] == 1:
                 if target_cpa is None or performance_data['expected_cpa'] <= target_cpa:
-                    creator_data = {
-                        'creator': creator,
-                        'tier': 1,
-                        'performance_data': performance_data,
-                        'matching_rationale': 'Historical performance data available',
-                        'performance_score': 1.0,
-                        'demographic_score': 0.0,
-                        'topic_score': 0.0,
-                        'similarity_score': 0.0
-                    }
-                    tier1_creators.append(creator_data)
+                    all_creators.append(creator_data)
+            else:
+                # Phase 2 and 3 don't have CPA constraints
+                all_creators.append(creator_data)
         
-        return tier1_creators
+        # Sort by tier first, then by sort_key within each tier
+        all_creators.sort(key=lambda x: (x['tier'], x['sort_key']))
+        
+        return all_creators
     
     def _get_tier2_creators(
         self, 
@@ -412,13 +425,72 @@ class SmartMatchingService:
         advertiser_id: Optional[int], 
         category: Optional[str]
     ) -> Dict[int, Dict[str, Any]]:
-        """Get performance data for multiple creators in batch queries."""
+        """Get performance data for multiple creators in batch queries with three-phase categorization."""
         from sqlalchemy import func, and_
         from app.models import ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion
         
         print(f"DEBUG: Getting batch performance data for {len(creator_ids)} creators")
         
-        # Build base query for clicks
+        # Phase 1: Same advertiser/category performance
+        same_performance_data = self._get_same_performance_data(creator_ids, advertiser_id, category)
+        
+        # Phase 2: Cross-performance (other advertisers/categories)
+        cross_performance_data = self._get_cross_performance_data(creator_ids, advertiser_id, category)
+        
+        # Combine results with phase categorization
+        performance_data = {}
+        for creator_id in creator_ids:
+            same_data = same_performance_data.get(creator_id, {'total_clicks': 0, 'total_conversions': 0})
+            cross_data = cross_performance_data.get(creator_id, {'total_clicks': 0, 'total_conversions': 0})
+            
+            # Determine which phase this creator belongs to
+            if same_data['total_clicks'] > 0 or same_data['total_conversions'] > 0:
+                # Phase 1: Same advertiser/category performance
+                performance_data[creator_id] = {
+                    'phase': 1,
+                    'total_clicks': same_data['total_clicks'],
+                    'total_conversions': same_data['total_conversions'],
+                    'historical_cvr': same_data['total_conversions'] / same_data['total_clicks'] if same_data['total_clicks'] > 0 else 0.0,
+                    'cross_clicks': cross_data['total_clicks'],
+                    'cross_conversions': cross_data['total_conversions'],
+                    'cross_cvr': cross_data['total_conversions'] / cross_data['total_clicks'] if cross_data['total_clicks'] > 0 else 0.0
+                }
+            elif cross_data['total_clicks'] > 0 or cross_data['total_conversions'] > 0:
+                # Phase 2: Cross-performance
+                performance_data[creator_id] = {
+                    'phase': 2,
+                    'total_clicks': 0,
+                    'total_conversions': 0,
+                    'historical_cvr': 0.0,
+                    'cross_clicks': cross_data['total_clicks'],
+                    'cross_conversions': cross_data['total_conversions'],
+                    'cross_cvr': cross_data['total_conversions'] / cross_data['total_clicks'] if cross_data['total_clicks'] > 0 else 0.0
+                }
+            else:
+                # Phase 3: No historical performance
+                performance_data[creator_id] = {
+                    'phase': 3,
+                    'total_clicks': 0,
+                    'total_conversions': 0,
+                    'historical_cvr': 0.0,
+                    'cross_clicks': 0,
+                    'cross_conversions': 0,
+                    'cross_cvr': 0.0
+                }
+        
+        return performance_data
+
+    def _get_same_performance_data(
+        self, 
+        creator_ids: List[int],
+        advertiser_id: Optional[int], 
+        category: Optional[str]
+    ) -> Dict[int, Dict[str, Any]]:
+        """Get performance data for same advertiser/category."""
+        from sqlalchemy import func
+        from app.models import ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion
+        
+        # Build base query for clicks (same advertiser/category)
         clicks_query = self.db.query(
             ClickUnique.creator_id,
             func.sum(ClickUnique.unique_clicks).label('total_clicks')
@@ -439,9 +511,8 @@ class SmartMatchingService:
             clicks_query = clicks_query.filter(Campaign.advertiser_id == advertiser_id)
         
         clicks_results = {row.creator_id: row.total_clicks or 0 for row in clicks_query.group_by(ClickUnique.creator_id).all()}
-        print(f"DEBUG: Batch clicks query returned {len(clicks_results)} results")
         
-        # Build base query for conversions
+        # Build base query for conversions (same advertiser/category)
         conversions_query = self.db.query(
             Conversion.creator_id,
             func.sum(Conversion.conversions).label('total_conversions')
@@ -460,21 +531,78 @@ class SmartMatchingService:
             conversions_query = conversions_query.filter(Campaign.advertiser_id == advertiser_id)
         
         conversions_results = {row.creator_id: row.total_conversions or 0 for row in conversions_query.group_by(Conversion.creator_id).all()}
-        print(f"DEBUG: Batch conversions query returned {len(conversions_results)} results")
         
         # Combine results
-        performance_data = {}
+        same_performance_data = {}
         for creator_id in creator_ids:
-            total_clicks = clicks_results.get(creator_id, 0)
-            total_conversions = conversions_results.get(creator_id, 0)
-            
-            performance_data[creator_id] = {
-                'total_clicks': total_clicks,
-                'total_conversions': total_conversions,
-                'historical_cvr': total_conversions / total_clicks if total_clicks > 0 else 0.0
+            same_performance_data[creator_id] = {
+                'total_clicks': clicks_results.get(creator_id, 0),
+                'total_conversions': conversions_results.get(creator_id, 0)
             }
         
-        return performance_data
+        return same_performance_data
+
+    def _get_cross_performance_data(
+        self, 
+        creator_ids: List[int],
+        advertiser_id: Optional[int], 
+        category: Optional[str]
+    ) -> Dict[int, Dict[str, Any]]:
+        """Get performance data for other advertisers/categories."""
+        from sqlalchemy import func
+        from app.models import ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion
+        
+        # Build base query for clicks (other advertisers/categories)
+        clicks_query = self.db.query(
+            ClickUnique.creator_id,
+            func.sum(ClickUnique.unique_clicks).label('total_clicks')
+        ).join(
+            PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+        ).join(
+            Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+        ).join(
+            Campaign, Campaign.campaign_id == Insertion.campaign_id
+        ).join(
+            Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+        ).filter(ClickUnique.creator_id.in_(creator_ids))
+        
+        # Exclude same advertiser/category
+        if category:
+            clicks_query = clicks_query.filter(Advertiser.category != category)
+        elif advertiser_id:
+            clicks_query = clicks_query.filter(Campaign.advertiser_id != advertiser_id)
+        
+        clicks_results = {row.creator_id: row.total_clicks or 0 for row in clicks_query.group_by(ClickUnique.creator_id).all()}
+        
+        # Build base query for conversions (other advertisers/categories)
+        conversions_query = self.db.query(
+            Conversion.creator_id,
+            func.sum(Conversion.conversions).label('total_conversions')
+        ).join(
+            Insertion, Insertion.insertion_id == Conversion.insertion_id
+        ).join(
+            Campaign, Campaign.campaign_id == Insertion.campaign_id
+        ).join(
+            Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+        ).filter(Conversion.creator_id.in_(creator_ids))
+        
+        # Exclude same advertiser/category
+        if category:
+            conversions_query = conversions_query.filter(Advertiser.category != category)
+        elif advertiser_id:
+            conversions_query = conversions_query.filter(Campaign.advertiser_id != advertiser_id)
+        
+        conversions_results = {row.creator_id: row.total_conversions or 0 for row in conversions_query.group_by(Conversion.creator_id).all()}
+        
+        # Combine results
+        cross_performance_data = {}
+        for creator_id in creator_ids:
+            cross_performance_data[creator_id] = {
+                'total_clicks': clicks_results.get(creator_id, 0),
+                'total_conversions': conversions_results.get(creator_id, 0)
+            }
+        
+        return cross_performance_data
 
     def _create_performance_data_from_batch(
         self,
@@ -484,21 +612,43 @@ class SmartMatchingService:
         horizon_days: int,
         advertiser_avg_cvr: float
     ) -> Dict[str, Any]:
-        """Create performance data from batch query results."""
+        """Create performance data from batch query results with three-phase logic."""
+        phase = perf_data['phase']
         total_clicks = perf_data['total_clicks']
         total_conversions = perf_data['total_conversions']
         historical_cvr = perf_data['historical_cvr']
+        cross_clicks = perf_data['cross_clicks']
+        cross_conversions = perf_data['cross_conversions']
+        cross_cvr = perf_data['cross_cvr']
         
-        print(f"DEBUG: Creator {creator.creator_id} - Batch data: clicks={total_clicks}, conversions={total_conversions}, cvr={historical_cvr:.4f}")
+        print(f"DEBUG: Creator {creator.creator_id} - Phase {phase}: same_clicks={total_clicks}, same_conversions={total_conversions}, cross_clicks={cross_clicks}, cross_conversions={cross_conversions}")
         
-        # Use historical CVR if available, otherwise use advertiser average
-        expected_cvr = historical_cvr if historical_cvr > 0 else advertiser_avg_cvr
-        print(f"DEBUG: Creator {creator.creator_id} - Using CVR: {expected_cvr:.4f}")
+        # Determine CVR based on phase
+        if phase == 1:
+            # Phase 1: Use same advertiser/category CVR
+            expected_cvr = historical_cvr if historical_cvr > 0 else advertiser_avg_cvr
+            performance_clicks = total_clicks
+            performance_conversions = total_conversions
+        elif phase == 2:
+            # Phase 2: Use cross-performance CVR
+            expected_cvr = cross_cvr if cross_cvr > 0 else advertiser_avg_cvr
+            performance_clicks = cross_clicks
+            performance_conversions = cross_conversions
+        else:
+            # Phase 3: Use advertiser average CVR
+            expected_cvr = advertiser_avg_cvr
+            performance_clicks = 0
+            performance_conversions = 0
         
-        # Calculate expected clicks based on historical performance
-        if total_clicks > 0:
-            # Use median clicks per placement for 1 placement
+        print(f"DEBUG: Creator {creator.creator_id} - Phase {phase}, Using CVR: {expected_cvr:.4f}")
+        
+        # Calculate expected clicks based on phase
+        if phase == 1 and total_clicks > 0:
+            # Use same advertiser performance
             expected_clicks = total_clicks / max(1, total_clicks / 100)  # Rough estimate
+        elif phase == 2 and cross_clicks > 0:
+            # Use cross-performance data
+            expected_clicks = cross_clicks / max(1, cross_clicks / 100)  # Rough estimate
         else:
             # Fallback to conservative estimate
             expected_clicks = creator.conservative_click_estimate or 100
@@ -509,17 +659,18 @@ class SmartMatchingService:
         expected_conversions = expected_clicks * expected_cvr
         expected_cpa = cpc / expected_cvr if expected_cvr > 0 else None
         
-        print(f"DEBUG: Creator {creator.creator_id} - Expected clicks: {expected_clicks}, spend: ${expected_spend:.2f}, conversions: {expected_conversions:.2f}")
+        print(f"DEBUG: Creator {creator.creator_id} - Expected clicks: {expected_clicks}, spend: ${expected_spend:.2f}, conversions: {expected_conversions:.2f}, CPA: ${expected_cpa:.2f if expected_cpa else 'N/A'}")
         
         return {
-            'has_performance': total_clicks > 0 or total_conversions > 0,
+            'phase': phase,
+            'has_performance': performance_clicks > 0 or performance_conversions > 0,
             'expected_cpa': expected_cpa,
             'expected_clicks': expected_clicks,
             'expected_spend': expected_spend,
             'expected_conversions': expected_conversions,
             'expected_cvr': expected_cvr,
-            'historical_clicks': total_clicks,
-            'historical_conversions': total_conversions,
+            'historical_clicks': performance_clicks,
+            'historical_conversions': performance_conversions,
             'median_clicks_per_placement': expected_clicks,
             'recommended_placements': 1
         }
