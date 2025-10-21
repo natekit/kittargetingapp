@@ -5,7 +5,7 @@ import csv
 import io
 import asyncio
 from typing import Dict, Any, List
-from app.models import Creator, CreatorTopic, CreatorKeyword, ClickUnique, Conversion, Placement
+from app.models import Creator, CreatorTopic, CreatorKeyword, ClickUnique, Conversion, Placement, DeclinedCreator
 from app.db import get_db
 from datetime import datetime
 
