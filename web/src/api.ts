@@ -99,7 +99,7 @@ class ApiClient {
   }
 
   // Seed creators
-  async seedCreators(file: File, syncMode: 'upsert' | 'full_sync' | 'full_reset' = 'upsert'): Promise<SyncResult> {
+  async seedCreators(file: File, syncMode: 'upsert' | 'full_sync' = 'upsert'): Promise<SyncResult> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('sync_mode', syncMode);

@@ -190,7 +190,7 @@ export function CreatorManagement() {
                       name="syncMode"
                       value="full_sync"
                       checked={syncMode === 'full_sync'}
-                      onChange={(e) => setSyncMode(e.target.value as 'upsert' | 'full_sync' | 'full_reset')}
+                      onChange={(e) => setSyncMode(e.target.value as 'upsert' | 'full_sync')}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                     />
                     <span className="ml-2 text-sm text-gray-700">
