@@ -608,6 +608,7 @@ async def upload_vectors(
             try:
                 # Get account_id
                 account_id = row.get('account_id')
+                print(f"DEBUG: Row {row_num} - account_id: '{account_id}'")
                 if not account_id:
                     errors.append(f"Row {row_num}: Missing account_id")
                     skipped_count += 1
@@ -615,6 +616,7 @@ async def upload_vectors(
                 
                 # Find creator by account_id (using pre-fetched lookup)
                 creator = creator_lookup.get(account_id)
+                print(f"DEBUG: Row {row_num} - creator found: {creator is not None}")
                 if not creator:
                     errors.append(f"Row {row_num}: Creator with account_id '{account_id}' not found")
                     skipped_count += 1
@@ -622,6 +624,7 @@ async def upload_vectors(
                 
                 # Extract vector components (all columns except account_id)
                 vector_components = []
+                print(f"DEBUG: Row {row_num} - CSV columns: {list(row.keys())}")
                 for key, value in row.items():
                     if key != 'account_id' and value.strip():
                         try:
@@ -631,6 +634,7 @@ async def upload_vectors(
                             break
                 else:
                     # All vector components parsed successfully
+                    print(f"DEBUG: Row {row_num} - vector components: {len(vector_components)}")
                     if not vector_components:
                         errors.append(f"Row {row_num}: No vector components found")
                         skipped_count += 1
@@ -643,6 +647,7 @@ async def upload_vectors(
                         'vector_dimension': vector_dimension,
                         'creator_name': creator.name
                     })
+                    print(f"DEBUG: Row {row_num} - Added to batch: creator_id={creator.creator_id}, dimension={vector_dimension}")
                 
             except Exception as e:
                 errors.append(f"Row {row_num}: {str(e)}")
