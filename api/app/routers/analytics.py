@@ -1102,62 +1102,62 @@ def _get_other_campaigns_clicks(creator: Creator, advertiser_id: Optional[int], 
             else:
                 print(f"DEBUG: Skipping {creator.name} - too expensive (${expected_spend:.2f} > ${remaining_budget:.2f})")
         
-        # Second pass: Continue adding creators until budget is fully utilized
-        print(f"DEBUG: First pass complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
+    # Second pass: Continue adding creators until budget is fully utilized
+    print(f"DEBUG: First pass complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
+    
+    # Keep trying to fill budget with additional creators
+    max_iterations = len(matched_creators) * 3  # Prevent infinite loops
+    iteration = 0
+    
+    while remaining_budget > 0 and iteration < max_iterations:
+        iteration += 1
+        print(f"DEBUG: Smart budget filling iteration {iteration} - ${remaining_budget:.2f} remaining")
         
-        # Keep trying to fill budget with additional creators
-        max_iterations = len(matched_creators) * 3  # Prevent infinite loops
-        iteration = 0
+        added_creator = False
         
-        while remaining_budget > 0 and iteration < max_iterations:
-            iteration += 1
-            print(f"DEBUG: Smart budget filling iteration {iteration} - ${remaining_budget:.2f} remaining")
+        # Try to find creators that can fit in remaining budget
+        for creator_data in matched_creators:
+            creator = creator_data['creator']
+            performance_data = creator_data['performance_data']
+            creator_id = creator.creator_id
+            current_placements = creator_placement_counts.get(creator_id, 0)
             
-            added_creator = False
+            # Check placement limit
+            if current_placements >= 3:
+                continue
             
-            # Try to find creators that can fit in remaining budget
-            for creator_data in matched_creators:
-                creator = creator_data['creator']
-                performance_data = creator_data['performance_data']
-                creator_id = creator.creator_id
-                current_placements = creator_placement_counts.get(creator_id, 0)
-                
-                # Check placement limit
-                if current_placements >= 3:
-                    continue
-                
-                if performance_data:
-                    expected_clicks = performance_data.get('expected_clicks', 100)
-                    expected_conversions = performance_data.get('expected_conversions', 10)
-                else:
-                    # Fallback for creators without performance data (Tier 2, 4)
-                    expected_clicks = creator.conservative_click_estimate or 100
-                    expected_conversions = expected_clicks * (plan_request.advertiser_avg_cvr or 0.025)  # Use advertiser CVR or 2.5% default
-                
-                expected_spend = cpc * expected_clicks
-                
-                if expected_spend <= remaining_budget:
-                    print(f"DEBUG: Adding additional creator {creator.name} (placement {current_placements + 1}) with remaining budget")
-                    picked_creators.append(PlanCreator(
-                        creator_id=creator.creator_id,
-                        name=creator.name,
-                        acct_id=creator.acct_id,
-                        expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
-                        expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
-                        clicks_per_day=expected_clicks / plan_request.horizon_days,
-                        expected_clicks=expected_clicks,
-                        expected_spend=expected_spend,
-                        expected_conversions=expected_conversions,
-                        value_ratio=creator_data['combined_score'],
-                        recommended_placements=performance_data.get('recommended_placements', 1) if performance_data else 1,
-                        median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
-                    ))
-                    total_spend += expected_spend
-                    total_conversions += expected_conversions
-                    remaining_budget -= expected_spend
-                    creator_placement_counts[creator_id] = current_placements + 1
-                    added_creator = True
-                    break
+            if performance_data:
+                expected_clicks = performance_data.get('expected_clicks', 100)
+                expected_conversions = performance_data.get('expected_conversions', 10)
+            else:
+                # Fallback for creators without performance data (Tier 2, 4)
+                expected_clicks = creator.conservative_click_estimate or 100
+                expected_conversions = expected_clicks * (plan_request.advertiser_avg_cvr or 0.025)  # Use advertiser CVR or 2.5% default
+            
+            expected_spend = cpc * expected_clicks
+            
+            if expected_spend <= remaining_budget:
+                print(f"DEBUG: Adding additional creator {creator.name} (placement {current_placements + 1}) with remaining budget")
+                picked_creators.append(PlanCreator(
+                    creator_id=creator.creator_id,
+                    name=creator.name,
+                    acct_id=creator.acct_id,
+                    expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
+                    expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
+                    clicks_per_day=expected_clicks / plan_request.horizon_days,
+                    expected_clicks=expected_clicks,
+                    expected_spend=expected_spend,
+                    expected_conversions=expected_conversions,
+                    value_ratio=creator_data['combined_score'],
+                    recommended_placements=performance_data.get('recommended_placements', 1) if performance_data else 1,
+                    median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
+                ))
+                total_spend += expected_spend
+                total_conversions += expected_conversions
+                remaining_budget -= expected_spend
+                creator_placement_counts[creator_id] = current_placements + 1
+                added_creator = True
+                break
             
             # If no full creators fit, try pro-rating the best remaining creator
             if not added_creator and remaining_budget > 0:
