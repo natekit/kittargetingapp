@@ -13,6 +13,7 @@ export function CreatorManagement() {
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
+  const [syncMode, setSyncMode] = useState<'upsert' | 'full_sync' | 'full_reset'>('upsert');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -67,9 +68,19 @@ export function CreatorManagement() {
     setResult(null);
 
     try {
-      const data = await api.seedCreators(file);
+      const data = await api.seedCreators(file, syncMode);
       setResult(data);
-      toast.success(`Creator database synced! ${data.upserted} creators updated, ${data.skipped} skipped.`);
+      
+      let message = '';
+      if (syncMode === 'full_reset') {
+        message = `Creator database fully reset! Wiped ${data.wiped || 0} existing creators, loaded ${data.upserted} creators from CSV, ${data.skipped} skipped.`;
+      } else if (syncMode === 'full_sync') {
+        message = `Creator database fully synced! ${data.upserted} creators updated, ${data.skipped} skipped, ${data.deleted || 0} deleted.`;
+      } else {
+        message = `Creator database synced! ${data.upserted} creators updated, ${data.skipped} skipped.`;
+      }
+      
+      toast.success(message);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           
@@ -160,8 +171,63 @@ export function CreatorManagement() {
                 </div>
               )}
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sync Mode
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="syncMode"
+                      value="upsert"
+                      checked={syncMode === 'upsert'}
+                      onChange={(e) => setSyncMode(e.target.value as 'upsert' | 'full_sync')}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">
+                      <strong>Upsert Only</strong> - Add new creators and update existing ones (safe, fast)
+                    </span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="syncMode"
+                      value="full_sync"
+                      checked={syncMode === 'full_sync'}
+                      onChange={(e) => setSyncMode(e.target.value as 'upsert' | 'full_sync' | 'full_reset')}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">
+                      <strong>Full Sync</strong> - Add/update creators AND remove creators not in CSV (⚠️ deletes data)
+                    </span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="syncMode"
+                      value="full_reset"
+                      checked={syncMode === 'full_reset'}
+                      onChange={(e) => setSyncMode(e.target.value as 'upsert' | 'full_sync' | 'full_reset')}
+                      className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">
+                      <strong>Full Reset</strong> - Wipe all creators and reload from CSV (🚨 DESTRUCTIVE - recommended)
+                    </span>
+                  </label>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  {syncMode === 'full_reset' 
+                    ? '🚨 This will completely wipe all existing creators and reload everything from your CSV file.'
+                    : syncMode === 'full_sync' 
+                    ? '⚠️ This will delete creators from your database that are not in the CSV file.'
+                    : 'This will only add new creators and update existing ones without deleting anything.'
+                  }
+                </p>
+              </div>
+
               <Button type="submit" disabled={loading || !file || csvErrors.length > 0}>
-                {loading ? 'Syncing...' : 'Sync Creator Database'}
+                {loading ? 'Syncing...' : `Sync Creator Database (${syncMode === 'full_reset' ? 'Full Reset' : syncMode === 'full_sync' ? 'Full Sync' : 'Upsert Only'})`}
               </Button>
               
               {csvErrors.length > 0 && (
@@ -248,7 +314,7 @@ export function CreatorManagement() {
             <CardTitle>Sync Results</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className={`grid grid-cols-1 gap-4 ${(result.deleted !== undefined || result.wiped !== undefined) ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
               <div className="bg-green-50 border border-green-200 rounded-md p-4">
                 <div className="text-2xl font-bold text-green-600">{result.upserted}</div>
                 <div className="text-sm text-green-700">Creators Updated</div>
@@ -257,6 +323,18 @@ export function CreatorManagement() {
                 <div className="text-2xl font-bold text-yellow-600">{result.skipped}</div>
                 <div className="text-sm text-yellow-700">Rows Skipped</div>
               </div>
+              {result.wiped !== undefined && result.wiped > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <div className="text-2xl font-bold text-red-600">{result.wiped}</div>
+                  <div className="text-sm text-red-700">Creators Wiped</div>
+                </div>
+              )}
+              {result.deleted !== undefined && result.deleted > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded-md p-4">
+                  <div className="text-2xl font-bold text-orange-600">{result.deleted}</div>
+                  <div className="text-sm text-orange-700">Creators Deleted</div>
+                </div>
+              )}
               <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
                 <div className="text-2xl font-bold text-blue-600">{result.total_processed}</div>
                 <div className="text-sm text-blue-700">Total Processed</div>

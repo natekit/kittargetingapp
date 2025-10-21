@@ -88,6 +88,8 @@ export interface ConversionsUploadResponse {
 export interface SyncResult {
   upserted: number;
   skipped: number;
+  deleted?: number;
+  wiped?: number;
   total_processed: number;
   errors?: string[];
 }
