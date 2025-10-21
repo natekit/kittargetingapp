@@ -177,10 +177,21 @@ class SmartMatchingService:
         """Tier 1: Creators with historical performance data."""
         tier1_creators = []
         
+        # Batch performance data query for all creators
+        creator_ids = [creator.creator_id for creator in creators]
+        batch_performance_data = self._get_batch_performance_data(creator_ids, advertiser_id, category)
+        
         for creator in creators:
-            # Get historical performance data
-            performance_data = self._get_creator_performance(
-                creator, advertiser_id, category, cpc, horizon_days, advertiser_avg_cvr
+            # Get performance data from batch results
+            perf_data = batch_performance_data.get(creator.creator_id, {
+                'total_clicks': 0,
+                'total_conversions': 0,
+                'historical_cvr': 0.0
+            })
+            
+            # Create performance data in the expected format
+            performance_data = self._create_performance_data_from_batch(
+                creator, perf_data, cpc, horizon_days, advertiser_avg_cvr
             )
             
             if performance_data['has_performance']:
@@ -395,6 +406,124 @@ class SmartMatchingService:
         
         return creators
     
+    def _get_batch_performance_data(
+        self, 
+        creator_ids: List[int],
+        advertiser_id: Optional[int], 
+        category: Optional[str]
+    ) -> Dict[int, Dict[str, Any]]:
+        """Get performance data for multiple creators in batch queries."""
+        from sqlalchemy import func, and_
+        from app.models import ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion
+        
+        print(f"DEBUG: Getting batch performance data for {len(creator_ids)} creators")
+        
+        # Build base query for clicks
+        clicks_query = self.db.query(
+            ClickUnique.creator_id,
+            func.sum(ClickUnique.unique_clicks).label('total_clicks')
+        ).join(
+            PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+        ).join(
+            Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+        ).join(
+            Campaign, Campaign.campaign_id == Insertion.campaign_id
+        ).filter(ClickUnique.creator_id.in_(creator_ids))
+        
+        # Add category or advertiser filter
+        if category:
+            clicks_query = clicks_query.join(
+                Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+            ).filter(Advertiser.category == category)
+        elif advertiser_id:
+            clicks_query = clicks_query.filter(Campaign.advertiser_id == advertiser_id)
+        
+        clicks_results = {row.creator_id: row.total_clicks or 0 for row in clicks_query.group_by(ClickUnique.creator_id).all()}
+        print(f"DEBUG: Batch clicks query returned {len(clicks_results)} results")
+        
+        # Build base query for conversions
+        conversions_query = self.db.query(
+            Conversion.creator_id,
+            func.sum(Conversion.conversions).label('total_conversions')
+        ).join(
+            Insertion, Insertion.insertion_id == Conversion.insertion_id
+        ).join(
+            Campaign, Campaign.campaign_id == Insertion.campaign_id
+        ).filter(Conversion.creator_id.in_(creator_ids))
+        
+        # Add category or advertiser filter
+        if category:
+            conversions_query = conversions_query.join(
+                Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+            ).filter(Advertiser.category == category)
+        elif advertiser_id:
+            conversions_query = conversions_query.filter(Campaign.advertiser_id == advertiser_id)
+        
+        conversions_results = {row.creator_id: row.total_conversions or 0 for row in conversions_query.group_by(Conversion.creator_id).all()}
+        print(f"DEBUG: Batch conversions query returned {len(conversions_results)} results")
+        
+        # Combine results
+        performance_data = {}
+        for creator_id in creator_ids:
+            total_clicks = clicks_results.get(creator_id, 0)
+            total_conversions = conversions_results.get(creator_id, 0)
+            
+            performance_data[creator_id] = {
+                'total_clicks': total_clicks,
+                'total_conversions': total_conversions,
+                'historical_cvr': total_conversions / total_clicks if total_clicks > 0 else 0.0
+            }
+        
+        return performance_data
+
+    def _create_performance_data_from_batch(
+        self,
+        creator: Creator,
+        perf_data: Dict[str, Any],
+        cpc: float,
+        horizon_days: int,
+        advertiser_avg_cvr: float
+    ) -> Dict[str, Any]:
+        """Create performance data from batch query results."""
+        total_clicks = perf_data['total_clicks']
+        total_conversions = perf_data['total_conversions']
+        historical_cvr = perf_data['historical_cvr']
+        
+        print(f"DEBUG: Creator {creator.creator_id} - Batch data: clicks={total_clicks}, conversions={total_conversions}, cvr={historical_cvr:.4f}")
+        
+        # Use historical CVR if available, otherwise use advertiser average
+        expected_cvr = historical_cvr if historical_cvr > 0 else advertiser_avg_cvr
+        print(f"DEBUG: Creator {creator.creator_id} - Using CVR: {expected_cvr:.4f}")
+        
+        # Calculate expected clicks based on historical performance
+        if total_clicks > 0:
+            # Use median clicks per placement for 1 placement
+            expected_clicks = total_clicks / max(1, total_clicks / 100)  # Rough estimate
+        else:
+            # Fallback to conservative estimate
+            expected_clicks = creator.conservative_click_estimate or 100
+            print(f"DEBUG: Creator {creator.creator_id} - Using conservative estimate: {expected_clicks}")
+        
+        # Calculate other metrics
+        expected_spend = cpc * expected_clicks
+        expected_conversions = expected_clicks * expected_cvr
+        expected_cpa = cpc / expected_cvr if expected_cvr > 0 else None
+        
+        print(f"DEBUG: Creator {creator.creator_id} - Expected clicks: {expected_clicks}, spend: ${expected_spend:.2f}, conversions: {expected_conversions:.2f}")
+        
+        return {
+            'has_performance': total_clicks > 0 or total_conversions > 0,
+            'expected_cpa': expected_cpa,
+            'expected_clicks': expected_clicks,
+            'expected_spend': expected_spend,
+            'expected_conversions': expected_conversions,
+            'expected_cvr': expected_cvr,
+            'historical_clicks': total_clicks,
+            'historical_conversions': total_conversions,
+            'median_clicks_per_placement': expected_clicks,
+            'recommended_placements': 1
+        }
+
     def _get_creator_performance(
         self, 
         creator: Creator, 
