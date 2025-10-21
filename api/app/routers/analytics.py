@@ -809,6 +809,16 @@ async def create_smart_plan(
             blended_cpa=blended_cpa,
             budget_utilization=budget_utilization
         )
+    
+    except Exception as e:
+        print(f"DEBUG: Error in smart plan creation: {e}")
+        return PlanResponse(
+            picked_creators=[],
+            total_spend=0.0,
+            total_conversions=0.0,
+            blended_cpa=0.0,
+            budget_utilization=0.0
+        )
 
 
 def _allocate_creators_with_vector_cpa_logic(
@@ -837,7 +847,7 @@ def _allocate_creators_with_vector_cpa_logic(
     creators_with_cpa = []
     creators_without_cpa = []
     
-    for creator_data in matched_creators:
+        for creator_data in matched_creators:
         performance_data = creator_data['performance_data']
         if performance_data and performance_data.get('expected_cpa') is not None:
             creators_with_cpa.append(creator_data)
@@ -878,11 +888,11 @@ def _allocate_creators_with_vector_cpa_logic(
         if remaining_budget <= 0:
             break
             
-        creator = creator_data['creator']
-        performance_data = creator_data['performance_data']
-        creator_id = creator.creator_id
-        current_placements = creator_placement_counts.get(creator_id, 0)
-        
+            creator = creator_data['creator']
+            performance_data = creator_data['performance_data']
+            creator_id = creator.creator_id
+            current_placements = creator_placement_counts.get(creator_id, 0)
+            
         if current_placements >= 3:
             continue
             
@@ -1033,13 +1043,13 @@ def _create_plan_creator(
     """Create a PlanCreator object from creator data."""
     performance_data = creator_data.get('performance_data', {})
     
-    if performance_data:
-        expected_clicks = performance_data.get('expected_clicks', 100)
-        expected_conversions = performance_data.get('expected_conversions', 10)
+            if performance_data:
+                expected_clicks = performance_data.get('expected_clicks', 100)
+                expected_conversions = performance_data.get('expected_conversions', 10)
         expected_cvr = performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025)
         expected_cpa = performance_data.get('expected_cpa', cpc / expected_cvr)
-    else:
-        expected_clicks = creator.conservative_click_estimate or 100
+            else:
+                    expected_clicks = creator.conservative_click_estimate or 100
         expected_conversions = expected_clicks * (plan_request.advertiser_avg_cvr or 0.025)
         expected_cvr = plan_request.advertiser_avg_cvr or 0.025
         expected_cpa = cpc / expected_cvr
