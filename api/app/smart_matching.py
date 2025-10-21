@@ -659,7 +659,8 @@ class SmartMatchingService:
         expected_conversions = expected_clicks * expected_cvr
         expected_cpa = cpc / expected_cvr if expected_cvr > 0 else None
         
-        print(f"DEBUG: Creator {creator.creator_id} - Expected clicks: {expected_clicks}, spend: ${expected_spend:.2f}, conversions: {expected_conversions:.2f}, CPA: ${expected_cpa:.2f if expected_cpa else 'N/A'}")
+        cpa_str = f"${expected_cpa:.2f}" if expected_cpa else "N/A"
+        print(f"DEBUG: Creator {creator.creator_id} - Expected clicks: {expected_clicks}, spend: ${expected_spend:.2f}, conversions: {expected_conversions:.2f}, CPA: {cpa_str}")
         
         return {
             'phase': phase,
