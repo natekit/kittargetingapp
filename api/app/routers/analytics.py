@@ -847,7 +847,7 @@ def _allocate_creators_with_vector_cpa_logic(
     creators_with_cpa = []
     creators_without_cpa = []
     
-        for creator_data in matched_creators:
+    for creator_data in matched_creators:
         performance_data = creator_data['performance_data']
         if performance_data and performance_data.get('expected_cpa') is not None:
             creators_with_cpa.append(creator_data)
