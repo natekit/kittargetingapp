@@ -506,6 +506,65 @@ async def seed_creators(
         raise HTTPException(status_code=500, detail=f"Error processing CSV: {str(e)}")
 
 
+@router.post("/cleanup/orphaned-data")
+async def cleanup_orphaned_data(db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Clean up orphaned performance data (clicks, conversions, declined creators)
+    that reference creators that no longer exist.
+    """
+    try:
+        print("DEBUG: Starting orphaned data cleanup...")
+        
+        # Get all existing creator IDs
+        existing_creator_ids = set(row[0] for row in db.query(Creator.creator_id).all())
+        print(f"DEBUG: Found {len(existing_creator_ids)} existing creators")
+        
+        # Clean up orphaned clicks
+        orphaned_clicks = db.query(ClickUnique).filter(
+            ~ClickUnique.creator_id.in_(existing_creator_ids)
+        ).count()
+        if orphaned_clicks > 0:
+            db.query(ClickUnique).filter(
+                ~ClickUnique.creator_id.in_(existing_creator_ids)
+            ).delete()
+            print(f"DEBUG: Deleted {orphaned_clicks} orphaned click records")
+        
+        # Clean up orphaned conversions
+        orphaned_conversions = db.query(Conversion).filter(
+            ~Conversion.creator_id.in_(existing_creator_ids)
+        ).count()
+        if orphaned_conversions > 0:
+            db.query(Conversion).filter(
+                ~Conversion.creator_id.in_(existing_creator_ids)
+            ).delete()
+            print(f"DEBUG: Deleted {orphaned_conversions} orphaned conversion records")
+        
+        # Clean up orphaned declined creators
+        orphaned_declined = db.query(DeclinedCreator).filter(
+            ~DeclinedCreator.creator_id.in_(existing_creator_ids)
+        ).count()
+        if orphaned_declined > 0:
+            db.query(DeclinedCreator).filter(
+                ~DeclinedCreator.creator_id.in_(existing_creator_ids)
+            ).delete()
+            print(f"DEBUG: Deleted {orphaned_declined} orphaned declined creator records")
+        
+        db.commit()
+        
+        return {
+            "status": "success",
+            "orphaned_clicks": orphaned_clicks,
+            "orphaned_conversions": orphaned_conversions,
+            "orphaned_declined": orphaned_declined,
+            "message": f"Cleaned up {orphaned_clicks} orphaned clicks, {orphaned_conversions} orphaned conversions, {orphaned_declined} orphaned declined records"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        print(f"DEBUG: Error cleaning up orphaned data: {e}")
+        raise HTTPException(status_code=500, detail=f"Error cleaning up orphaned data: {str(e)}")
+
+
 @router.post("/seed/creators/async")
 async def seed_creators_async(
     file: UploadFile = File(...),
