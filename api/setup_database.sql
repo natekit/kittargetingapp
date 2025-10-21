@@ -121,5 +121,18 @@ EXCLUDE USING gist (
     period WITH &&
 );
 
+-- Create creator_vectors table
+CREATE TABLE creator_vectors (
+    creator_id INTEGER NOT NULL PRIMARY KEY,
+    vector NUMERIC[] NOT NULL,
+    vector_dimension INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (creator_id) REFERENCES creators(creator_id),
+    CHECK (vector_dimension > 0)
+);
+
+CREATE INDEX ix_creator_vectors_creator_id ON creator_vectors(creator_id);
+
 
 

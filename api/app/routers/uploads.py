@@ -593,6 +593,17 @@ async def upload_vectors(
         skipped_count = 0
         errors = []
         
+        # Batch processing for speed - collect all data first
+        batch_data = []
+        creator_lookup = {}
+        
+        # Pre-fetch all creators for faster lookup
+        print("DEBUG: Pre-fetching creators for batch processing...")
+        all_creators = db.query(Creator).all()
+        creator_lookup = {creator.acct_id: creator for creator in all_creators}
+        print(f"DEBUG: Loaded {len(creator_lookup)} creators for lookup")
+        
+        # Process all rows first
         for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 because header is row 1
             try:
                 # Get account_id
@@ -602,8 +613,8 @@ async def upload_vectors(
                     skipped_count += 1
                     continue
                 
-                # Find creator by account_id
-                creator = db.query(Creator).filter(Creator.acct_id == account_id).first()
+                # Find creator by account_id (using pre-fetched lookup)
+                creator = creator_lookup.get(account_id)
                 if not creator:
                     errors.append(f"Row {row_num}: Creator with account_id '{account_id}' not found")
                     skipped_count += 1
@@ -626,34 +637,46 @@ async def upload_vectors(
                         continue
                     
                     vector_dimension = len(vector_components)
-                    
-                    # Check if vector already exists
-                    existing_vector = db.query(CreatorVector).filter(CreatorVector.creator_id == creator.creator_id).first()
-                    
-                    if existing_vector:
-                        # Update existing vector
-                        existing_vector.vector = vector_components
-                        existing_vector.vector_dimension = vector_dimension
-                        existing_vector.updated_at = datetime.now(pytz.UTC)
-                        updated_count += 1
-                        print(f"DEBUG: Updated vector for creator {creator.name} (ID: {creator.creator_id}) - dimension: {vector_dimension}")
-                    else:
-                        # Create new vector
-                        new_vector = CreatorVector(
-                            creator_id=creator.creator_id,
-                            vector=vector_components,
-                            vector_dimension=vector_dimension
-                        )
-                        db.add(new_vector)
-                        uploaded_count += 1
-                        print(f"DEBUG: Created vector for creator {creator.name} (ID: {creator.creator_id}) - dimension: {vector_dimension}")
+                    batch_data.append({
+                        'creator_id': creator.creator_id,
+                        'vector': vector_components,
+                        'vector_dimension': vector_dimension,
+                        'creator_name': creator.name
+                    })
                 
             except Exception as e:
                 errors.append(f"Row {row_num}: {str(e)}")
                 skipped_count += 1
                 print(f"DEBUG: Error processing row {row_num}: {e}")
         
-        # Commit all changes
+        # Batch database operations
+        print(f"DEBUG: Processing {len(batch_data)} vectors in batch...")
+        
+        # Get existing vectors for batch update
+        creator_ids = [item['creator_id'] for item in batch_data]
+        existing_vectors = {v.creator_id: v for v in db.query(CreatorVector).filter(CreatorVector.creator_id.in_(creator_ids)).all()}
+        
+        # Process batch
+        for item in batch_data:
+            creator_id = item['creator_id']
+            if creator_id in existing_vectors:
+                # Update existing vector
+                existing_vectors[creator_id].vector = item['vector']
+                existing_vectors[creator_id].vector_dimension = item['vector_dimension']
+                existing_vectors[creator_id].updated_at = datetime.now(pytz.UTC)
+                updated_count += 1
+            else:
+                # Create new vector
+                new_vector = CreatorVector(
+                    creator_id=creator_id,
+                    vector=item['vector'],
+                    vector_dimension=item['vector_dimension']
+                )
+                db.add(new_vector)
+                uploaded_count += 1
+        
+        # Single commit for all changes
+        print(f"DEBUG: Committing {len(batch_data)} vector operations...")
         db.commit()
         
         print(f"DEBUG: Vector upload completed - {uploaded_count} created, {updated_count} updated, {skipped_count} skipped")
@@ -673,3 +696,58 @@ async def upload_vectors(
         db.rollback()
         print(f"DEBUG: Vector upload error: {e}")
         raise HTTPException(status_code=500, detail=f"Vector upload failed: {str(e)}")
+
+
+@router.post("/create-vectors-table")
+async def create_vectors_table(db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """
+    Create the creator_vectors table directly.
+    Use this if migrations aren't working.
+    """
+    try:
+        print("DEBUG: Creating creator_vectors table...")
+        
+        # Check if table already exists
+        result = db.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'creator_vectors'
+            );
+        """).scalar()
+        
+        if result:
+            return {
+                "status": "success",
+                "message": "creator_vectors table already exists",
+                "table_exists": True
+            }
+        
+        # Create the table
+        db.execute("""
+            CREATE TABLE creator_vectors (
+                creator_id INTEGER NOT NULL,
+                vector NUMERIC[] NOT NULL,
+                vector_dimension INTEGER NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+                updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+                PRIMARY KEY (creator_id),
+                FOREIGN KEY (creator_id) REFERENCES creators (creator_id),
+                CHECK (vector_dimension > 0)
+            );
+        """)
+        
+        db.commit()
+        
+        print("DEBUG: creator_vectors table created successfully")
+        
+        return {
+            "status": "success",
+            "message": "creator_vectors table created successfully",
+            "table_exists": True
+        }
+        
+    except Exception as e:
+        db.rollback()
+        print(f"DEBUG: Error creating table: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create table: {str(e)}")
