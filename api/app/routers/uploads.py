@@ -627,11 +627,28 @@ async def upload_vectors(
                 print(f"DEBUG: Row {row_num} - CSV columns: {list(row.keys())}")
                 for key, value in row.items():
                     if key != 'account_id' and value.strip():
-                        try:
-                            vector_components.append(float(value))
-                        except ValueError:
-                            errors.append(f"Row {row_num}: Invalid vector component '{value}' for column '{key}'")
-                            break
+                        # Check if this is a Python list format [0.1, 0.2, ...]
+                        if value.strip().startswith('[') and value.strip().endswith(']'):
+                            try:
+                                # Parse Python list format
+                                import ast
+                                vector_list = ast.literal_eval(value.strip())
+                                if isinstance(vector_list, list):
+                                    vector_components.extend([float(x) for x in vector_list])
+                                    print(f"DEBUG: Row {row_num} - Parsed list with {len(vector_list)} components")
+                                else:
+                                    errors.append(f"Row {row_num}: Invalid list format '{value}' for column '{key}'")
+                                    break
+                            except (ValueError, SyntaxError) as e:
+                                errors.append(f"Row {row_num}: Invalid list format '{value}' for column '{key}': {e}")
+                                break
+                        else:
+                            # Regular single value
+                            try:
+                                vector_components.append(float(value))
+                            except ValueError:
+                                errors.append(f"Row {row_num}: Invalid vector component '{value}' for column '{key}'")
+                                break
                 else:
                     # All vector components parsed successfully
                     print(f"DEBUG: Row {row_num} - vector components: {len(vector_components)}")
