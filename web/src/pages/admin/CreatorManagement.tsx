@@ -13,7 +13,7 @@ export function CreatorManagement() {
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
-  const [syncMode, setSyncMode] = useState<'upsert' | 'full_sync' | 'full_reset'>('upsert');
+  const [syncMode, setSyncMode] = useState<'upsert' | 'full_sync'>('upsert');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -71,14 +71,9 @@ export function CreatorManagement() {
       const data = await api.seedCreators(file, syncMode);
       setResult(data);
       
-      let message = '';
-      if (syncMode === 'full_reset') {
-        message = `Creator database fully reset! Wiped ${data.wiped || 0} existing creators, loaded ${data.upserted} creators from CSV, ${data.skipped} skipped.`;
-      } else if (syncMode === 'full_sync') {
-        message = `Creator database fully synced! ${data.upserted} creators updated, ${data.skipped} skipped, ${data.deleted || 0} deleted.`;
-      } else {
-        message = `Creator database synced! ${data.upserted} creators updated, ${data.skipped} skipped.`;
-      }
+      const message = syncMode === 'full_sync' 
+        ? `Creator database fully synced! ${data.upserted} creators updated, ${data.skipped} skipped, ${data.deleted || 0} deleted.`
+        : `Creator database synced! ${data.upserted} creators updated, ${data.skipped} skipped.`;
       
       toast.success(message);
         } catch (error) {
@@ -202,24 +197,9 @@ export function CreatorManagement() {
                       <strong>Full Sync</strong> - Add/update creators AND remove creators not in CSV (⚠️ deletes data)
                     </span>
                   </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="syncMode"
-                      value="full_reset"
-                      checked={syncMode === 'full_reset'}
-                      onChange={(e) => setSyncMode(e.target.value as 'upsert' | 'full_sync' | 'full_reset')}
-                      className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">
-                      <strong>Full Reset</strong> - Wipe all creators and reload from CSV (🚨 DESTRUCTIVE - recommended)
-                    </span>
-                  </label>
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
-                  {syncMode === 'full_reset' 
-                    ? '🚨 This will completely wipe all existing creators and reload everything from your CSV file.'
-                    : syncMode === 'full_sync' 
+                  {syncMode === 'full_sync' 
                     ? '⚠️ This will delete creators from your database that are not in the CSV file.'
                     : 'This will only add new creators and update existing ones without deleting anything.'
                   }
@@ -227,7 +207,7 @@ export function CreatorManagement() {
               </div>
 
               <Button type="submit" disabled={loading || !file || csvErrors.length > 0}>
-                {loading ? 'Syncing...' : `Sync Creator Database (${syncMode === 'full_reset' ? 'Full Reset' : syncMode === 'full_sync' ? 'Full Sync' : 'Upsert Only'})`}
+                {loading ? 'Syncing...' : `Sync Creator Database (${syncMode === 'full_sync' ? 'Full Sync' : 'Upsert Only'})`}
               </Button>
               
               {csvErrors.length > 0 && (
