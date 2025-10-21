@@ -708,13 +708,14 @@ async def create_vectors_table(db: Session = Depends(get_db)) -> Dict[str, Any]:
         print("DEBUG: Creating creator_vectors table...")
         
         # Check if table already exists
-        result = db.execute("""
+        from sqlalchemy import text
+        result = db.execute(text("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'public' 
                 AND table_name = 'creator_vectors'
             );
-        """).scalar()
+        """)).scalar()
         
         if result:
             return {
@@ -724,7 +725,7 @@ async def create_vectors_table(db: Session = Depends(get_db)) -> Dict[str, Any]:
             }
         
         # Create the table
-        db.execute("""
+        db.execute(text("""
             CREATE TABLE creator_vectors (
                 creator_id INTEGER NOT NULL,
                 vector NUMERIC[] NOT NULL,
@@ -735,7 +736,7 @@ async def create_vectors_table(db: Session = Depends(get_db)) -> Dict[str, Any]:
                 FOREIGN KEY (creator_id) REFERENCES creators (creator_id),
                 CHECK (vector_dimension > 0)
             );
-        """)
+        """))
         
         db.commit()
         
