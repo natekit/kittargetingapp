@@ -571,7 +571,7 @@ async def cleanup_performance_data(
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
 
 
-@router.post("/vectors")
+@router.post("/uploads/vectors")
 async def upload_vectors(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)

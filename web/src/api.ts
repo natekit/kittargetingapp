@@ -128,7 +128,7 @@ class ApiClient {
     const formData = new FormData();
     formData.append('file', file);
     
-    return this.request<VectorUploadResult>('/api/uploads/vectors', {
+    return this.request<VectorUploadResult>('/api/uploads/uploads/vectors', {
       method: 'POST',
       headers: {}, // Let browser set Content-Type for FormData
       body: formData,
