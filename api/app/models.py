@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean, Text, ForeignKey, TIMESTAMP
+from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean, Text, ForeignKey, TIMESTAMP, ARRAY
 from sqlalchemy.dialects.postgresql import CITEXT, DATERANGE
 from sqlalchemy.orm import relationship
 from sqlalchemy.schema import CheckConstraint
@@ -72,6 +72,7 @@ class Creator(Base):
     placements = relationship("Placement", back_populates="creator")
     click_uniques = relationship("ClickUnique", back_populates="creator")
     conversions = relationship("Conversion", back_populates="creator")
+    vector = relationship("CreatorVector", back_populates="creator", uselist=False)
     creator_topics = relationship("CreatorTopic", back_populates="creator")
     creator_keywords = relationship("CreatorKeyword", back_populates="creator")
 
@@ -255,5 +256,23 @@ class CreatorSimilarity(Base):
     __table_args__ = (
         CheckConstraint("creator_a_id != creator_b_id", name="check_different_creators"),
         CheckConstraint("similarity_score >= 0 AND similarity_score <= 1", name="check_similarity_range"),
+    )
+
+
+class CreatorVector(Base):
+    __tablename__ = "creator_vectors"
+    
+    creator_id = Column(Integer, ForeignKey("creators.creator_id"), nullable=False, primary_key=True)
+    vector = Column(ARRAY(Numeric), nullable=False)  # Vector embedding as array of floats
+    vector_dimension = Column(Integer, nullable=False)  # Dimension of the vector
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    
+    # Relationships
+    creator = relationship("Creator", back_populates="vector")
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("vector_dimension > 0", name="check_vector_dimension_positive"),
     )
 

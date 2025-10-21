@@ -8,6 +8,7 @@ import type {
   PerformanceUploadResponse,
   ConversionsUploadResponse,
   SyncResult,
+  VectorUploadResult,
   HistoricalDataResponse,
   CampaignForecastResponse
 } from './types';
@@ -117,6 +118,17 @@ class ApiClient {
     formData.append('file', file);
     
     return this.request<PerformanceUploadResponse>(`/api/uploads/performance?insertion_id=${insertionId}`, {
+      method: 'POST',
+      headers: {}, // Let browser set Content-Type for FormData
+      body: formData,
+    });
+  }
+
+  async uploadVectors(file: File): Promise<VectorUploadResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    return this.request<VectorUploadResult>('/api/uploads/vectors', {
       method: 'POST',
       headers: {}, // Let browser set Content-Type for FormData
       body: formData,

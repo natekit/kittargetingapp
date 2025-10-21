@@ -1,6 +1,7 @@
 import { AdvertiserForm } from './AdvertiserForm';
 import { CampaignForm } from './CampaignForm';
 import { InsertionForm } from './InsertionForm';
+import { VectorUpload } from './VectorUpload';
 
 export function AdminPage() {
   return (
@@ -16,6 +17,7 @@ export function AdminPage() {
         <AdvertiserForm />
         <CampaignForm />
         <InsertionForm />
+        <VectorUpload />
       </div>
     </div>
   );

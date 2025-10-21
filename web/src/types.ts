@@ -94,6 +94,17 @@ export interface SyncResult {
   errors?: string[];
 }
 
+export interface VectorUploadResult {
+  status: string;
+  message: string;
+  uploaded: number;
+  updated: number;
+  skipped: number;
+  total_processed: number;
+  errors: string[];
+  total_errors: number;
+}
+
 export interface HistoricalDataSummary {
   total_creators: number;
   creators_with_clicks: number;

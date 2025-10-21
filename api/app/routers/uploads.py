@@ -8,7 +8,7 @@ import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime, date
 import pytz
-from app.models import Creator, PerfUpload, ClickUnique, Insertion, ConvUpload, Conversion, Advertiser, Campaign, DeclinedCreator
+from app.models import Creator, PerfUpload, ClickUnique, Insertion, ConvUpload, Conversion, Advertiser, Campaign, DeclinedCreator, CreatorVector
 from app.db import get_db
 
 router = APIRouter()
@@ -569,3 +569,107 @@ async def cleanup_performance_data(
         db.rollback()
         print(f"DEBUG: CLEANUP - Error during cleanup: {e}")
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
+
+
+@router.post("/vectors")
+async def upload_vectors(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Upload creator vectors from CSV file.
+    Expected CSV format: account_id, vector_component_1, vector_component_2, ..., vector_component_n
+    """
+    try:
+        print(f"DEBUG: Vector upload started - {file.filename}")
+        
+        # Read and parse CSV
+        content = await file.read()
+        csv_content = content.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(csv_content))
+        
+        uploaded_count = 0
+        updated_count = 0
+        skipped_count = 0
+        errors = []
+        
+        for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 because header is row 1
+            try:
+                # Get account_id
+                account_id = row.get('account_id')
+                if not account_id:
+                    errors.append(f"Row {row_num}: Missing account_id")
+                    skipped_count += 1
+                    continue
+                
+                # Find creator by account_id
+                creator = db.query(Creator).filter(Creator.acct_id == account_id).first()
+                if not creator:
+                    errors.append(f"Row {row_num}: Creator with account_id '{account_id}' not found")
+                    skipped_count += 1
+                    continue
+                
+                # Extract vector components (all columns except account_id)
+                vector_components = []
+                for key, value in row.items():
+                    if key != 'account_id' and value.strip():
+                        try:
+                            vector_components.append(float(value))
+                        except ValueError:
+                            errors.append(f"Row {row_num}: Invalid vector component '{value}' for column '{key}'")
+                            break
+                else:
+                    # All vector components parsed successfully
+                    if not vector_components:
+                        errors.append(f"Row {row_num}: No vector components found")
+                        skipped_count += 1
+                        continue
+                    
+                    vector_dimension = len(vector_components)
+                    
+                    # Check if vector already exists
+                    existing_vector = db.query(CreatorVector).filter(CreatorVector.creator_id == creator.creator_id).first()
+                    
+                    if existing_vector:
+                        # Update existing vector
+                        existing_vector.vector = vector_components
+                        existing_vector.vector_dimension = vector_dimension
+                        existing_vector.updated_at = datetime.now(pytz.UTC)
+                        updated_count += 1
+                        print(f"DEBUG: Updated vector for creator {creator.name} (ID: {creator.creator_id}) - dimension: {vector_dimension}")
+                    else:
+                        # Create new vector
+                        new_vector = CreatorVector(
+                            creator_id=creator.creator_id,
+                            vector=vector_components,
+                            vector_dimension=vector_dimension
+                        )
+                        db.add(new_vector)
+                        uploaded_count += 1
+                        print(f"DEBUG: Created vector for creator {creator.name} (ID: {creator.creator_id}) - dimension: {vector_dimension}")
+                
+            except Exception as e:
+                errors.append(f"Row {row_num}: {str(e)}")
+                skipped_count += 1
+                print(f"DEBUG: Error processing row {row_num}: {e}")
+        
+        # Commit all changes
+        db.commit()
+        
+        print(f"DEBUG: Vector upload completed - {uploaded_count} created, {updated_count} updated, {skipped_count} skipped")
+        
+        return {
+            "status": "success",
+            "message": f"Vector upload completed",
+            "uploaded": uploaded_count,
+            "updated": updated_count,
+            "skipped": skipped_count,
+            "total_processed": uploaded_count + updated_count + skipped_count,
+            "errors": errors[:10] if errors else [],  # Limit errors to first 10
+            "total_errors": len(errors)
+        }
+        
+    except Exception as e:
+        db.rollback()
+        print(f"DEBUG: Vector upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Vector upload failed: {str(e)}")
