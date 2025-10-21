@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Button } from '../components/ui/button';
-import { Card } from '../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
 import { api } from '../../api';
 
 interface VectorUploadResult {
