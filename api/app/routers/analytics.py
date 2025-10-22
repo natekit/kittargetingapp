@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import math
 
 from app.db import get_db
-from app.models import Creator, ClickUnique, Conversion, Placement, DeclinedCreator, CreatorVector
+from app.models import Creator, Click, Conversion, Placement, DeclinedCreator, CreatorVector
 from app.schemas import (
     PlanRequest, PlanResponse, PlanCreator, 
     LeaderboardEntry, FilterOptions, HistoricalDataResponse,
@@ -78,14 +78,14 @@ async def get_leaderboard(
     
     for creator in creators:
         # Get click and conversion data
-        clicks_query = db.query(func.sum(ClickUnique.clicks)).filter(ClickUnique.creator_id == creator.creator_id)
+        clicks_query = db.query(func.sum(Click.clicks)).filter(Click.creator_id == creator.creator_id)
         conversions_query = db.query(func.sum(Conversion.conversions)).filter(Conversion.creator_id == creator.creator_id)
         
         if advertiser_id:
-            clicks_query = clicks_query.filter(ClickUnique.advertiser_id == advertiser_id)
+            clicks_query = clicks_query.filter(Click.advertiser_id == advertiser_id)
             conversions_query = conversions_query.filter(Conversion.advertiser_id == advertiser_id)
         if category:
-            clicks_query = clicks_query.filter(ClickUnique.category == category)
+            clicks_query = clicks_query.filter(Click.category == category)
             conversions_query = conversions_query.filter(Conversion.category == category)
         
         total_clicks = clicks_query.scalar() or 0
@@ -180,7 +180,8 @@ async def create_smart_plan(
         smart_service = SmartMatchingService(db)
         matched_creators = smart_service.find_smart_creators(
             advertiser_id=plan_request.advertiser_id,
-            category=plan_request.category
+            category=plan_request.category,
+            max_creators=plan_request.max_creators
         )
         
         if not matched_creators:
@@ -193,9 +194,8 @@ async def create_smart_plan(
                 creators=[]
             )
         
-        # Calculate CPC (use average from matched creators)
-        total_cpc = sum(c['creator'].cpc for c in matched_creators if c['creator'].cpc)
-        avg_cpc = total_cpc / len([c for c in matched_creators if c['creator'].cpc]) if matched_creators else 1.0
+        # Calculate CPC (use provided CPC or default)
+        avg_cpc = plan_request.cpc or 1.0
         
         # Use enhanced allocation logic with vector-CPA matching
         plan_creators = _allocate_creators_with_vector_cpa_logic(
@@ -514,15 +514,15 @@ async def get_historical_data(
         end_dt = datetime.now()
     
     # Get clicks data
-    clicks_query = db.query(ClickUnique).filter(
-        ClickUnique.date >= start_dt,
-        ClickUnique.date <= end_dt
+    clicks_query = db.query(Click).filter(
+        Click.date >= start_dt,
+        Click.date <= end_dt
     )
     
     if advertiser_id:
-        clicks_query = clicks_query.filter(ClickUnique.advertiser_id == advertiser_id)
+        clicks_query = clicks_query.filter(Click.advertiser_id == advertiser_id)
     if category:
-        clicks_query = clicks_query.filter(ClickUnique.category == category)
+        clicks_query = clicks_query.filter(Click.category == category)
     
     clicks_data = clicks_query.all()
     
@@ -588,20 +588,20 @@ async def debug_clicks(
     """Debug endpoint to check click data"""
     
     # Get total clicks
-    clicks_query = db.query(func.sum(ClickUnique.clicks))
+    clicks_query = db.query(func.sum(Click.clicks))
     if advertiser_id:
-        clicks_query = clicks_query.filter(ClickUnique.advertiser_id == advertiser_id)
+        clicks_query = clicks_query.filter(Click.advertiser_id == advertiser_id)
     if category:
-        clicks_query = clicks_query.filter(ClickUnique.category == category)
+        clicks_query = clicks_query.filter(Click.category == category)
     
     total_clicks = clicks_query.scalar() or 0
     
     # Get unique advertisers and categories
-    advertisers = db.query(ClickUnique.advertiser_id).distinct().all()
-    categories = db.query(ClickUnique.category).distinct().all()
+    advertisers = db.query(Click.advertiser_id).distinct().all()
+    categories = db.query(Click.category).distinct().all()
     
     # Get sample click records
-    sample_clicks = db.query(ClickUnique).limit(10).all()
+    sample_clicks = db.query(Click).limit(10).all()
     
     return {
         "total_clicks": total_clicks,
@@ -630,18 +630,18 @@ async def get_campaign_forecast(
     start_date = datetime.now() - timedelta(days=request.lookback_days)
     
     # Get clicks and conversions for the specified period
-    clicks_query = db.query(func.sum(ClickUnique.clicks)).filter(
-        ClickUnique.date >= start_date
+    clicks_query = db.query(func.sum(Click.clicks)).filter(
+        Click.date >= start_date
     )
     conversions_query = db.query(func.sum(Conversion.conversions)).filter(
         Conversion.date >= start_date
     )
     
     if request.advertiser_id:
-        clicks_query = clicks_query.filter(ClickUnique.advertiser_id == request.advertiser_id)
+        clicks_query = clicks_query.filter(Click.advertiser_id == request.advertiser_id)
         conversions_query = conversions_query.filter(Conversion.advertiser_id == request.advertiser_id)
     if request.category:
-        clicks_query = clicks_query.filter(ClickUnique.category == request.category)
+        clicks_query = clicks_query.filter(Click.category == request.category)
         conversions_query = conversions_query.filter(Conversion.category == request.category)
     
     total_clicks = clicks_query.scalar() or 0
