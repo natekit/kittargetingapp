@@ -845,7 +845,7 @@ async def create_smart_plan(
                     expected_spend=expected_spend,
                     expected_conversions=expected_conversions,
                     value_ratio=creator_data['combined_score'],
-                    recommended_placements=performance_data.get('recommended_placements', 1) if performance_data else 1,
+                    recommended_placements=current_placements + 1,
                     median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
                 ))
                 total_spend += expected_spend
@@ -911,7 +911,7 @@ async def create_smart_plan(
                         expected_spend=expected_spend,
                         expected_conversions=expected_conversions,
                         value_ratio=creator_data['combined_score'],
-                        recommended_placements=performance_data.get('recommended_placements', 1) if performance_data else 1,
+                        recommended_placements=current_placements + 1,
                         median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
                     ))
                     total_spend += expected_spend
@@ -974,7 +974,7 @@ async def create_smart_plan(
                                 expected_spend=remaining_budget,
                                 expected_conversions=pro_rated_conversions,
                                 value_ratio=creator_data['combined_score'],
-                                recommended_placements=performance_data.get('recommended_placements', 1) if performance_data else 1,
+                                recommended_placements=current_placements + 1,
                                 median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
                             ))
                             total_spend += remaining_budget
