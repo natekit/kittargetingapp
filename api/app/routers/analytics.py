@@ -964,9 +964,9 @@ def _allocate_creators_with_vector_cpa_logic(
                 expected_spend = cpc * expected_clicks
                 
                 if expected_spend <= remaining_budget:
-                picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
+                    picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
                     creator_placement_counts[creator_id] = current_placements + 1
-                remaining_budget -= expected_spend
+                    remaining_budget -= expected_spend
                 print(f"DEBUG: Phase 3 - Added {creator.name} (placement {current_placements + 1})")
     
     # Budget optimization: Add more placements to existing creators
