@@ -856,16 +856,17 @@ async def create_smart_plan(
             else:
                 print(f"DEBUG: Skipping {creator.name} - too expensive (${expected_spend:.2f} > ${remaining_budget:.2f})")
         
-        # Second pass: Continue adding creators until budget is fully utilized
-        print(f"DEBUG: First pass complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
+        # Phase 2 & 3: Continue adding creators until budget is fully utilized
+        print(f"DEBUG: Phase 1 complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
         
-        # Keep trying to fill budget with additional creators
+        # Keep trying to fill budget with additional creators (Phase 2: other categories, Phase 3: more placements)
         max_iterations = len(matched_creators) * 3  # Prevent infinite loops
         iteration = 0
         
         while remaining_budget > 0 and iteration < max_iterations:
             iteration += 1
-            print(f"DEBUG: Smart budget filling iteration {iteration} - ${remaining_budget:.2f} remaining")
+            phase_name = "Phase 2 (other categories)" if iteration <= len(matched_creators) else "Phase 3 (more placements)"
+            print(f"DEBUG: {phase_name} - iteration {iteration}, ${remaining_budget:.2f} remaining")
             
             added_creator = False
             
@@ -897,7 +898,8 @@ async def create_smart_plan(
                 expected_spend = cpc * expected_clicks
                 
                 if expected_spend <= remaining_budget:
-                    print(f"DEBUG: Adding additional creator {creator.name} (placement {current_placements + 1}) with remaining budget")
+                    phase_name = "Phase 2 (other categories)" if iteration <= len(matched_creators) else "Phase 3 (more placements)"
+                    print(f"DEBUG: {phase_name} - Adding {creator.name} (placement {current_placements + 1}) with remaining budget")
                     picked_creators.append(PlanCreator(
                         creator_id=creator.creator_id,
                         name=creator.name,
@@ -956,7 +958,8 @@ async def create_smart_plan(
                     if expected_spend > remaining_budget:
                         pro_ratio = remaining_budget / expected_spend
                         if pro_ratio > 0.1:  # Only pro-rate if we can get at least 10% of the allocation
-                            print(f"DEBUG: Pro-rating {creator.name} (placement {current_placements + 1}) - ratio: {pro_ratio:.2f}")
+                            phase_name = "Phase 2 (other categories)" if iteration <= len(matched_creators) else "Phase 3 (more placements)"
+                            print(f"DEBUG: {phase_name} - Pro-rating {creator.name} (placement {current_placements + 1}) - ratio: {pro_ratio:.2f}")
                             pro_rated_clicks = expected_clicks * pro_ratio
                             pro_rated_conversions = expected_conversions * pro_ratio
                             
@@ -987,13 +990,18 @@ async def create_smart_plan(
                 print(f"DEBUG: No more creators can be added with remaining budget ${remaining_budget:.2f}")
                 break
         
-        print(f"DEBUG: Smart plan final budget utilization - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining, {len(picked_creators)} total placements")
+        print(f"DEBUG: Three-phase CPA enforcement complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining, {len(picked_creators)} total placements")
         
         # Calculate final metrics
         blended_cpa = total_spend / total_conversions if total_conversions > 0 else 0.0
         budget_utilization = total_spend / plan_request.budget if plan_request.budget > 0 else 0.0
         
-        print(f"DEBUG: Smart plan results - {len(picked_creators)} creators, ${total_spend:.2f} spend, {total_conversions:.2f} conversions, ${blended_cpa:.2f} CPA, {budget_utilization:.2%} utilization")
+        # Show phase breakdown
+        phase1_count = len([p for p in picked_creators if p.recommended_placements == 1])
+        phase2_3_count = len([p for p in picked_creators if p.recommended_placements > 1])
+        
+        print(f"DEBUG: Three-phase results - Phase 1: {phase1_count} creators, Phase 2&3: {phase2_3_count} additional placements")
+        print(f"DEBUG: Final results - {len(picked_creators)} creators, ${total_spend:.2f} spend, {total_conversions:.2f} conversions, ${blended_cpa:.2f} CPA, {budget_utilization:.2%} utilization")
         
         return PlanResponse(
             picked_creators=picked_creators,
