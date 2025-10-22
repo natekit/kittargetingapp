@@ -53,6 +53,8 @@ class PlanCreator(BaseModel):
     expected_spend: float
     expected_conversions: float
     value_ratio: float
+    recommended_placements: int
+    median_clicks_per_placement: Optional[float] = None
 
 
 class PlanResponse(BaseModel):
