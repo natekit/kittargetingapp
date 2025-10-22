@@ -1102,21 +1102,27 @@ async def create_smart_plan(
         
         print(f"DEBUG: Three-phase CPA enforcement complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining, {len(picked_creators)} total placements")
         
+        # Recalculate totals from final picked_creators to ensure accuracy
+        final_total_spend = sum(pc.expected_spend for pc in picked_creators)
+        final_total_conversions = sum(pc.expected_conversions for pc in picked_creators)
+        
+        print(f"DEBUG: Recalculated totals - spend: ${final_total_spend:.2f}, conversions: {final_total_conversions:.2f}")
+        
         # Calculate final metrics
-        blended_cpa = total_spend / total_conversions if total_conversions > 0 else 0.0
-        budget_utilization = total_spend / plan_request.budget if plan_request.budget > 0 else 0.0
+        blended_cpa = final_total_spend / final_total_conversions if final_total_conversions > 0 else 0.0
+        budget_utilization = final_total_spend / plan_request.budget if plan_request.budget > 0 else 0.0
         
         # Show phase breakdown
         phase1_count = len([p for p in picked_creators if p.recommended_placements == 1])
         phase2_3_count = len([p for p in picked_creators if p.recommended_placements > 1])
         
         print(f"DEBUG: Three-phase results - Phase 1: {phase1_count} creators, Phase 2&3: {phase2_3_count} additional placements")
-        print(f"DEBUG: Final results - {len(picked_creators)} creators, ${total_spend:.2f} spend, {total_conversions:.2f} conversions, ${blended_cpa:.2f} CPA, {budget_utilization:.2%} utilization")
+        print(f"DEBUG: Final results - {len(picked_creators)} creators, ${final_total_spend:.2f} spend, {final_total_conversions:.2f} conversions, ${blended_cpa:.2f} CPA, {budget_utilization:.2%} utilization")
         
         return PlanResponse(
             picked_creators=picked_creators,
-            total_spend=total_spend,
-            total_conversions=total_conversions,
+            total_spend=final_total_spend,
+            total_conversions=final_total_conversions,
             blended_cpa=blended_cpa,
             budget_utilization=budget_utilization
         )
