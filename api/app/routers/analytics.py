@@ -835,26 +835,61 @@ async def create_smart_plan(
             
             # Check if we can fit this creator in budget
             if expected_spend <= remaining_budget:
-                # Full allocation
-                picked_creators.append(PlanCreator(
-                    creator_id=creator.creator_id,
-                    name=creator.name,
-                    acct_id=creator.acct_id,
-                    expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
-                    expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
-                    clicks_per_day=expected_clicks / plan_request.horizon_days,
-                    expected_clicks=expected_clicks,
-                    expected_spend=expected_spend,
-                    expected_conversions=expected_conversions,
-                    value_ratio=creator_data['combined_score'],
-                    recommended_placements=current_placements + 1,
-                    median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
-                ))
-                total_spend += expected_spend
-                total_conversions += expected_conversions
-                remaining_budget -= expected_spend
-                creator_placement_counts[creator_id] = current_placements + 1
-                print(f"DEBUG: Added creator {creator.name} (placement {current_placements + 1}) - spend: ${expected_spend:.2f}, rationale: {creator_data['matching_rationale']}")
+                # Check if creator already exists in picked_creators
+                existing_creator = None
+                for i, pc in enumerate(picked_creators):
+                    if pc.creator_id == creator.creator_id:
+                        existing_creator = i
+                        break
+                
+                if existing_creator is not None:
+                    # Update existing creator - add another placement
+                    pc = picked_creators[existing_creator]
+                    new_placements = pc.recommended_placements + 1
+                    
+                    # Update the existing creator with multiplied values
+                    picked_creators[existing_creator] = PlanCreator(
+                        creator_id=pc.creator_id,
+                        name=pc.name,
+                        acct_id=pc.acct_id,
+                        expected_cvr=pc.expected_cvr,
+                        expected_cpa=pc.expected_cpa,
+                        clicks_per_day=pc.clicks_per_day,
+                        expected_clicks=expected_clicks * new_placements,  # Multiply by total placements
+                        expected_spend=expected_spend * new_placements,  # Multiply by total placements
+                        expected_conversions=expected_conversions * new_placements,  # Multiply by total placements
+                        value_ratio=pc.value_ratio,
+                        recommended_placements=new_placements,
+                        median_clicks_per_placement=pc.median_clicks_per_placement
+                    )
+                    
+                    # Update totals (subtract old values, add new values)
+                    total_spend = total_spend - (expected_spend * (new_placements - 1)) + expected_spend
+                    total_conversions = total_conversions - (expected_conversions * (new_placements - 1)) + expected_conversions
+                    remaining_budget -= expected_spend
+                    creator_placement_counts[creator_id] = new_placements
+                    print(f"DEBUG: Updated creator {creator.name} to {new_placements} placements - spend: ${expected_spend:.2f} per placement")
+                else:
+                    # Add new creator
+                    picked_creators.append(PlanCreator(
+                        creator_id=creator.creator_id,
+                        name=creator.name,
+                        acct_id=creator.acct_id,
+                        expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
+                        expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
+                        clicks_per_day=expected_clicks / plan_request.horizon_days,
+                        expected_clicks=expected_clicks,
+                        expected_spend=expected_spend,
+                        expected_conversions=expected_conversions,
+                        value_ratio=creator_data['combined_score'],
+                        recommended_placements=1,
+                        median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
+                    ))
+                    total_spend += expected_spend
+                    total_conversions += expected_conversions
+                    remaining_budget -= expected_spend
+                    creator_placement_counts[creator_id] = 1
+                    print(f"DEBUG: Added new creator {creator.name} (placement 1) - spend: ${expected_spend:.2f}, rationale: {creator_data['matching_rationale']}")
             else:
                 print(f"DEBUG: Skipping {creator.name} - too expensive (${expected_spend:.2f} > ${remaining_budget:.2f})")
         
@@ -901,25 +936,63 @@ async def create_smart_plan(
                 
                 if expected_spend <= remaining_budget:
                     phase_name = "Phase 2 (other categories)" if iteration <= len(matched_creators) else "Phase 3 (more placements)"
-                    print(f"DEBUG: {phase_name} - Adding {creator.name} (placement {current_placements + 1}) with remaining budget")
-                    picked_creators.append(PlanCreator(
-                        creator_id=creator.creator_id,
-                        name=creator.name,
-                        acct_id=creator.acct_id,
-                        expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
-                        expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
-                        clicks_per_day=expected_clicks / plan_request.horizon_days,
-                        expected_clicks=expected_clicks,
-                        expected_spend=expected_spend,
-                        expected_conversions=expected_conversions,
-                        value_ratio=creator_data['combined_score'],
-                        recommended_placements=current_placements + 1,
-                        median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
-                    ))
-                    total_spend += expected_spend
-                    total_conversions += expected_conversions
-                    remaining_budget -= expected_spend
-                    creator_placement_counts[creator_id] = current_placements + 1
+                    
+                    # Check if creator already exists in picked_creators
+                    existing_creator = None
+                    for i, pc in enumerate(picked_creators):
+                        if pc.creator_id == creator.creator_id:
+                            existing_creator = i
+                            break
+                    
+                    if existing_creator is not None:
+                        # Update existing creator - add another placement
+                        pc = picked_creators[existing_creator]
+                        new_placements = pc.recommended_placements + 1
+                        
+                        # Update the existing creator with multiplied values
+                        picked_creators[existing_creator] = PlanCreator(
+                            creator_id=pc.creator_id,
+                            name=pc.name,
+                            acct_id=pc.acct_id,
+                            expected_cvr=pc.expected_cvr,
+                            expected_cpa=pc.expected_cpa,
+                            clicks_per_day=pc.clicks_per_day,
+                            expected_clicks=expected_clicks * new_placements,  # Multiply by total placements
+                            expected_spend=expected_spend * new_placements,  # Multiply by total placements
+                            expected_conversions=expected_conversions * new_placements,  # Multiply by total placements
+                            value_ratio=pc.value_ratio,
+                            recommended_placements=new_placements,
+                            median_clicks_per_placement=pc.median_clicks_per_placement
+                        )
+                        
+                        # Update totals (subtract old values, add new values)
+                        total_spend = total_spend - (expected_spend * (new_placements - 1)) + expected_spend
+                        total_conversions = total_conversions - (expected_conversions * (new_placements - 1)) + expected_conversions
+                        remaining_budget -= expected_spend
+                        creator_placement_counts[creator_id] = new_placements
+                        print(f"DEBUG: {phase_name} - Updated {creator.name} to {new_placements} placements - spend: ${expected_spend:.2f} per placement")
+                    else:
+                        # Add new creator
+                        picked_creators.append(PlanCreator(
+                            creator_id=creator.creator_id,
+                            name=creator.name,
+                            acct_id=creator.acct_id,
+                            expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
+                            expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
+                            clicks_per_day=expected_clicks / plan_request.horizon_days,
+                            expected_clicks=expected_clicks,
+                            expected_spend=expected_spend,
+                            expected_conversions=expected_conversions,
+                            value_ratio=creator_data['combined_score'],
+                            recommended_placements=1,
+                            median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
+                        ))
+                        total_spend += expected_spend
+                        total_conversions += expected_conversions
+                        remaining_budget -= expected_spend
+                        creator_placement_counts[creator_id] = 1
+                        print(f"DEBUG: {phase_name} - Added new {creator.name} (placement 1) - spend: ${expected_spend:.2f}")
+                    
                     added_creator = True
                     break
             
@@ -961,28 +1034,63 @@ async def create_smart_plan(
                         pro_ratio = remaining_budget / expected_spend
                         if pro_ratio > 0.1:  # Only pro-rate if we can get at least 10% of the allocation
                             phase_name = "Phase 2 (other categories)" if iteration <= len(matched_creators) else "Phase 3 (more placements)"
-                            print(f"DEBUG: {phase_name} - Pro-rating {creator.name} (placement {current_placements + 1}) - ratio: {pro_ratio:.2f}")
                             pro_rated_clicks = expected_clicks * pro_ratio
                             pro_rated_conversions = expected_conversions * pro_ratio
                             
-                            picked_creators.append(PlanCreator(
-                                creator_id=creator.creator_id,
-                                name=creator.name,
-                                acct_id=creator.acct_id,
-                                expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
-                                expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
-                                clicks_per_day=pro_rated_clicks / plan_request.horizon_days,
-                                expected_clicks=pro_rated_clicks,
-                                expected_spend=remaining_budget,
-                                expected_conversions=pro_rated_conversions,
-                                value_ratio=creator_data['combined_score'],
-                                recommended_placements=current_placements + 1,
-                                median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
-                            ))
-                            total_spend += remaining_budget
-                            total_conversions += pro_rated_conversions
-                            creator_placement_counts[creator_id] = current_placements + 1
-                            print(f"DEBUG: Pro-rated creator {creator.name} (placement {current_placements + 1}) - spend: ${remaining_budget:.2f}, rationale: {creator_data['matching_rationale']}")
+                            # Check if creator already exists in picked_creators
+                            existing_creator = None
+                            for i, pc in enumerate(picked_creators):
+                                if pc.creator_id == creator.creator_id:
+                                    existing_creator = i
+                                    break
+                            
+                            if existing_creator is not None:
+                                # Update existing creator - add another placement
+                                pc = picked_creators[existing_creator]
+                                new_placements = pc.recommended_placements + 1
+                                
+                                # Update the existing creator with multiplied values
+                                picked_creators[existing_creator] = PlanCreator(
+                                    creator_id=pc.creator_id,
+                                    name=pc.name,
+                                    acct_id=pc.acct_id,
+                                    expected_cvr=pc.expected_cvr,
+                                    expected_cpa=pc.expected_cpa,
+                                    clicks_per_day=pc.clicks_per_day,
+                                    expected_clicks=pro_rated_clicks * new_placements,  # Multiply by total placements
+                                    expected_spend=remaining_budget * new_placements,  # Multiply by total placements
+                                    expected_conversions=pro_rated_conversions * new_placements,  # Multiply by total placements
+                                    value_ratio=pc.value_ratio,
+                                    recommended_placements=new_placements,
+                                    median_clicks_per_placement=pc.median_clicks_per_placement
+                                )
+                                
+                                # Update totals (subtract old values, add new values)
+                                total_spend = total_spend - (remaining_budget * (new_placements - 1)) + remaining_budget
+                                total_conversions = total_conversions - (pro_rated_conversions * (new_placements - 1)) + pro_rated_conversions
+                                creator_placement_counts[creator_id] = new_placements
+                                print(f"DEBUG: {phase_name} - Pro-rated update {creator.name} to {new_placements} placements - spend: ${remaining_budget:.2f} per placement")
+                            else:
+                                # Add new creator
+                                picked_creators.append(PlanCreator(
+                                    creator_id=creator.creator_id,
+                                    name=creator.name,
+                                    acct_id=creator.acct_id,
+                                    expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025) if performance_data else (plan_request.advertiser_avg_cvr or 0.025),
+                                    expected_cpa=performance_data.get('expected_cpa', cpc / (plan_request.advertiser_avg_cvr or 0.025)) if performance_data else (cpc / (plan_request.advertiser_avg_cvr or 0.025)),
+                                    clicks_per_day=pro_rated_clicks / plan_request.horizon_days,
+                                    expected_clicks=pro_rated_clicks,
+                                    expected_spend=remaining_budget,
+                                    expected_conversions=pro_rated_conversions,
+                                    value_ratio=creator_data['combined_score'],
+                                    recommended_placements=1,
+                                    median_clicks_per_placement=performance_data.get('median_clicks_per_placement') if performance_data else None
+                                ))
+                                total_spend += remaining_budget
+                                total_conversions += pro_rated_conversions
+                                creator_placement_counts[creator_id] = 1
+                                print(f"DEBUG: {phase_name} - Pro-rated new {creator.name} (placement 1) - spend: ${remaining_budget:.2f}")
+                            
                             remaining_budget = 0
                             added_creator = True
                             break
