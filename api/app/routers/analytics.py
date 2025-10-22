@@ -773,7 +773,16 @@ async def create_smart_plan(
         print(f"DEBUG: Smart matching found {len(matched_creators)} creators")
         
         if not matched_creators:
-            print("DEBUG: No creators found - returning empty plan")
+            print("DEBUG: No creators found - checking database...")
+            # Debug: Check if we have any creators at all
+            total_creators = db.query(Creator).count()
+            print(f"DEBUG: Total creators in database: {total_creators}")
+            
+            # Debug: Check if we have any performance data
+            total_clicks = db.query(ClickUnique).count()
+            total_conversions = db.query(Conversion).count()
+            print(f"DEBUG: Total clicks: {total_clicks}, Total conversions: {total_conversions}")
+            
             return PlanResponse(
                 picked_creators=[],
                 total_spend=0.0,

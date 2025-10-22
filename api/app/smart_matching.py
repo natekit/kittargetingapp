@@ -50,6 +50,10 @@ class SmartMatchingService:
         all_creators = creators_query.distinct().limit(500).all()  # Increase to 500 creators for better budget utilization
         print(f"DEBUG: Found {len(all_creators)} total creators (limited to 500 for budget utilization)")
         
+        if len(all_creators) == 0:
+            print("DEBUG: No creators found in database!")
+            return []
+        
         # Apply creator filtering based on Acct IDs
         if include_acct_ids or exclude_acct_ids:
             logger.info("Applying creator filtering")
