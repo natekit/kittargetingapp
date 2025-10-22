@@ -897,11 +897,11 @@ def _allocate_creators_with_vector_cpa_logic(
         if remaining_budget <= 0:
             break
             
-            creator = creator_data['creator']
-            performance_data = creator_data['performance_data']
-            creator_id = creator.creator_id
-            current_placements = creator_placement_counts.get(creator_id, 0)
-            
+        creator = creator_data['creator']
+        performance_data = creator_data['performance_data']
+        creator_id = creator.creator_id
+        current_placements = creator_placement_counts.get(creator_id, 0)
+        
         if current_placements >= 3:
             continue
             
