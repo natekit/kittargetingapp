@@ -1055,7 +1055,7 @@ async def create_smart_plan(
                 
                 # Find creators with no historical data but with vectors
                 vector_creators = db.query(Creator).filter(
-                    Creator.vector.isnot(None),
+                    Creator.vector.is_not(None),
                     ~Creator.creator_id.in_([pc.creator_id for pc in picked_creators])
                 ).all()
                 
