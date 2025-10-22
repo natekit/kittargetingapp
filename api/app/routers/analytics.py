@@ -143,7 +143,7 @@ async def create_plan(
     
     for creator in creators:
         expected_clicks = budget_per_creator / (plan_request.cpc or 1.0)
-        expected_conversions = expected_clicks * (creator.cvr / 100) if creator.cvr else 0
+        expected_conversions = expected_clicks * 0.025  # Use default 2.5% CVR
         
         plan_creators.append(PlanCreator(
             creator_id=creator.creator_id,
@@ -152,7 +152,7 @@ async def create_plan(
             expected_conversions=expected_conversions,
             expected_spend=budget_per_creator,
             cpc=plan_request.cpc or 1.0,
-            cvr=creator.cvr
+            cvr=2.5  # Default CVR
         ))
     
     total_clicks = sum(pc.expected_clicks for pc in plan_creators)
@@ -468,7 +468,7 @@ def _create_plan_creator(
     
     # Use performance data if available, otherwise use creator defaults
     expected_clicks = performance_data.get('expected_clicks', creator.conservative_click_estimate or 100)
-    expected_cvr = performance_data.get('expected_cvr', creator.cvr or 2.5)
+    expected_cvr = performance_data.get('expected_cvr', 2.5)
     expected_conversions = expected_clicks * (expected_cvr / 100)
     expected_spend = cpc * expected_clicks
     
