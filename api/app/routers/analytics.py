@@ -856,7 +856,7 @@ def _allocate_creators_with_vector_cpa_logic(
     phase2_creators = []  # Cross category/brand with CPA
     phase3_creators = []  # No CPA data
     
-        for creator_data in matched_creators:
+    for creator_data in matched_creators:
         performance_data = creator_data['performance_data']
         phase = performance_data.get('phase', 3)
         
