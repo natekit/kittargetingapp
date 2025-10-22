@@ -180,8 +180,7 @@ async def create_smart_plan(
         smart_service = SmartMatchingService(db)
         matched_creators = smart_service.find_smart_creators(
             advertiser_id=plan_request.advertiser_id,
-            category=plan_request.category,
-            max_creators=plan_request.max_creators
+            category=plan_request.category
         )
         
         if not matched_creators:
