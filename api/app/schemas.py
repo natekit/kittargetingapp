@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import date
 from decimal import Decimal
 
@@ -67,3 +67,74 @@ class CreatorOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Analytics schemas
+class PlanRequest(BaseModel):
+    category: Optional[str] = None
+    advertiser_id: Optional[int] = None
+    insertion_id: Optional[int] = None
+    cpc: Optional[float] = None
+    budget: float
+    max_creators: int = 50
+    target_cpa: Optional[float] = None
+
+
+class PlanCreator(BaseModel):
+    creator_id: int
+    name: str
+    expected_clicks: float
+    expected_conversions: float
+    expected_spend: float
+    cpc: float
+    cvr: float
+
+
+class PlanResponse(BaseModel):
+    plan_id: str
+    total_budget: float
+    estimated_clicks: float
+    estimated_conversions: float
+    estimated_cpa: Optional[float]
+    creators: List[PlanCreator]
+
+
+class LeaderboardEntry(BaseModel):
+    creator_id: int
+    name: str
+    total_clicks: int
+    total_conversions: int
+    cvr: float
+    cpa: Optional[float]
+    cpc: float
+
+
+class FilterOptions(BaseModel):
+    advertisers: List[str]
+    categories: List[str]
+
+
+class HistoricalDataResponse(BaseModel):
+    historical_data: List[Dict[str, Any]]
+    total_clicks: int
+    total_conversions: int
+    overall_cvr: float
+    start_date: str
+    end_date: str
+
+
+class CampaignForecastRequest(BaseModel):
+    advertiser_id: Optional[int] = None
+    category: Optional[str] = None
+    budget: float
+    avg_cpc: float
+    lookback_days: int = 30
+
+
+class CampaignForecastResponse(BaseModel):
+    historical_cvr: float
+    historical_cpa: Optional[float]
+    forecasted_clicks: float
+    forecasted_conversions: float
+    forecasted_cpa: Optional[float]
+    confidence_score: float
