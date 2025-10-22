@@ -141,7 +141,7 @@ async def create_plan(
     budget_per_creator = plan_request.budget / len(creators)
     plan_creators = []
     
-    for creator in creators:
+        for creator in creators:
         expected_clicks = budget_per_creator / (plan_request.cpc or 1.0)
         expected_conversions = expected_clicks * 0.025  # Use default 2.5% CVR
         
@@ -184,7 +184,7 @@ async def create_smart_plan(
         )
         
         if not matched_creators:
-            return PlanResponse(
+        return PlanResponse(
                 plan_id="smart_plan",
                 total_budget=0,
                 estimated_clicks=0,
@@ -264,7 +264,7 @@ def _allocate_creators_with_vector_cpa_logic(
             # Phase 2: Cross category/brand with CPA
             if plan_request.target_cpa is None or performance_data['expected_cpa'] <= plan_request.target_cpa:
                 phase2_creators.append(creator_data)
-        else:
+            else:
             # Phase 3: No CPA data
             phase3_creators.append(creator_data)
     
@@ -284,6 +284,7 @@ def _allocate_creators_with_vector_cpa_logic(
     
     # Allocation logic
     picked_creators = []
+    picked_creator_data = []  # Track original creator data for budget optimization
     creator_placement_counts = {}
     remaining_budget = plan_request.budget
     
@@ -291,23 +292,24 @@ def _allocate_creators_with_vector_cpa_logic(
     print("DEBUG: Phase 1 - Allocating same category/brand CPA creators")
     for creator_data in phase1_creators:
         if remaining_budget <= 0:
-            break
+                break
         
         creator = creator_data['creator']
         performance_data = creator_data['performance_data']
         creator_id = creator.creator_id
-        current_placements = creator_placement_counts.get(creator_id, 0)
-        
-        if current_placements >= 3:
-            continue
-            
+                current_placements = creator_placement_counts.get(creator_id, 0)
+                
+                if current_placements >= 3:
+                    continue
+                    
         # Calculate allocation
         expected_clicks = performance_data.get('expected_clicks', 100)
         expected_spend = cpc * expected_clicks
         
         if expected_spend <= remaining_budget:
             picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
-            creator_placement_counts[creator_id] = current_placements + 1
+            picked_creator_data.append(creator_data)
+                        creator_placement_counts[creator_id] = current_placements + 1
             remaining_budget -= expected_spend
             print(f"DEBUG: Phase 1 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, placement {current_placements + 1})")
     
@@ -316,22 +318,23 @@ def _allocate_creators_with_vector_cpa_logic(
     for creator_data in phase2_creators:
         if remaining_budget <= 0:
             break
-        
-        creator = creator_data['creator']
-        performance_data = creator_data['performance_data']
-        creator_id = creator.creator_id
-        current_placements = creator_placement_counts.get(creator_id, 0)
-        
-        if current_placements >= 3:
-            continue
-        
+    
+            creator = creator_data['creator']
+            performance_data = creator_data['performance_data']
+            creator_id = creator.creator_id
+            current_placements = creator_placement_counts.get(creator_id, 0)
+            
+            if current_placements >= 3:
+                continue
+            
         # Calculate allocation
         expected_clicks = performance_data.get('expected_clicks', 100)
         expected_spend = cpc * expected_clicks
         
-        if expected_spend <= remaining_budget:
+            if expected_spend <= remaining_budget:
             picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
-            creator_placement_counts[creator_id] = current_placements + 1
+            picked_creator_data.append(creator_data)
+                creator_placement_counts[creator_id] = current_placements + 1
             remaining_budget -= expected_spend
             print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, placement {current_placements + 1})")
     
@@ -348,20 +351,21 @@ def _allocate_creators_with_vector_cpa_logic(
             if remaining_budget <= 0:
                 break
                 
-            creator = creator_data['creator']
-            creator_id = creator.creator_id
-            current_placements = creator_placement_counts.get(creator_id, 0)
-            
-            if current_placements >= 3:
-                continue
-            
+                creator = creator_data['creator']
+                creator_id = creator.creator_id
+                current_placements = creator_placement_counts.get(creator_id, 0)
+                
+                if current_placements >= 3:
+                    continue
+                
             # Calculate allocation
-            expected_clicks = creator.conservative_click_estimate or 100
-            expected_spend = cpc * expected_clicks
-            
-            if expected_spend <= remaining_budget:
+                    expected_clicks = creator.conservative_click_estimate or 100
+                expected_spend = cpc * expected_clicks
+                
+                if expected_spend <= remaining_budget:
                 picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
-                creator_placement_counts[creator_id] = current_placements + 1
+                picked_creator_data.append(creator_data)
+                    creator_placement_counts[creator_id] = current_placements + 1
                 remaining_budget -= expected_spend
                 print(f"DEBUG: Phase 3 - Added {creator.name} (placement {current_placements + 1})")
     
@@ -369,24 +373,24 @@ def _allocate_creators_with_vector_cpa_logic(
     print("DEBUG: Budget optimization - Adding more placements to existing creators")
     if remaining_budget > 0:
         # Try to add more placements to existing creators (up to 3 total per creator)
-        for creator_data in picked_creators:
+        for creator_data in picked_creator_data:
             if remaining_budget <= 0:
-                break
+                    break
             
-            creator = creator_data['creator']
-            creator_id = creator.creator_id
-            current_placements = creator_placement_counts.get(creator_id, 0)
-            
-            if current_placements >= 3:
-                continue
-            
+                    creator = creator_data['creator']
+                    creator_id = creator.creator_id
+                    current_placements = creator_placement_counts.get(creator_id, 0)
+                    
+                    if current_placements >= 3:
+                        continue
+                    
             # Calculate allocation for additional placement
-            expected_clicks = creator.conservative_click_estimate or 100
-            expected_spend = cpc * expected_clicks
-            
+                            expected_clicks = creator.conservative_click_estimate or 100
+                    expected_spend = cpc * expected_clicks
+                    
             if expected_spend <= remaining_budget:
                 picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
-                creator_placement_counts[creator_id] = current_placements + 1
+                            creator_placement_counts[creator_id] = current_placements + 1
                 remaining_budget -= expected_spend
                 print(f"DEBUG: Budget opt - Added {creator.name} (placement {current_placements + 1})")
     
@@ -509,7 +513,7 @@ async def get_historical_data(
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
         except:
             end_dt = datetime.now()
-    else:
+        else:
         end_dt = datetime.now()
     
     # Get clicks data
@@ -526,7 +530,7 @@ async def get_historical_data(
     clicks_data = clicks_query.all()
     
     # Get conversions data
-    conversions_query = db.query(Conversion).filter(
+                conversions_query = db.query(Conversion).filter(
         Conversion.date >= start_dt,
         Conversion.date <= end_dt
     )
