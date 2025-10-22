@@ -822,6 +822,15 @@ async def create_smart_plan(
                 print(f"DEBUG: Skipping {creator.name} - already at max placements (3)")
                 continue
             
+            # CPA Enforcement: Only use creators with CPA ≤ target CPA
+            if plan_request.target_cpa is not None and performance_data and performance_data.get('expected_cpa') is not None:
+                expected_cpa = performance_data['expected_cpa']
+                if expected_cpa > plan_request.target_cpa:
+                    print(f"DEBUG: Skipping {creator.name} - CPA {expected_cpa:.2f} exceeds target CPA {plan_request.target_cpa:.2f}")
+                    continue
+                else:
+                    print(f"DEBUG: CPA check passed for {creator.name} - CPA {expected_cpa:.2f} ≤ target {plan_request.target_cpa:.2f}")
+            
             # Check if we can fit this creator in budget
             if expected_spend <= remaining_budget:
                 # Full allocation
@@ -871,6 +880,12 @@ async def create_smart_plan(
                 if current_placements >= 3:
                     continue
                 
+                # CPA Enforcement: Only use creators with CPA ≤ target CPA
+                if plan_request.target_cpa is not None and performance_data and performance_data.get('expected_cpa') is not None:
+                    expected_cpa = performance_data['expected_cpa']
+                    if expected_cpa > plan_request.target_cpa:
+                        continue  # Skip this creator
+                
                 if performance_data:
                     expected_clicks = performance_data.get('expected_clicks', 100)
                     expected_conversions = performance_data.get('expected_conversions', 10)
@@ -915,6 +930,12 @@ async def create_smart_plan(
                     # Check placement limit
                     if current_placements >= 3:
                         continue
+                    
+                    # CPA Enforcement: Only use creators with CPA ≤ target CPA
+                    if plan_request.target_cpa is not None and performance_data and performance_data.get('expected_cpa') is not None:
+                        expected_cpa = performance_data['expected_cpa']
+                        if expected_cpa > plan_request.target_cpa:
+                            continue  # Skip this creator
                     
                     if performance_data:
                         expected_clicks = performance_data.get('expected_clicks', 100)
