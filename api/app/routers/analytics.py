@@ -837,51 +837,51 @@ def _allocate_creators_with_vector_cpa_logic(
     db: Session
 ) -> List[PlanCreator]:
     """
-    Enhanced allocation logic combining CPA prioritization with vector similarity.
+    Enhanced allocation logic with proper budget utilization and CPA targeting.
     
     Logic:
-    1. Choose lowest CPA creators under target CPA
-    2. Choose closest vector matches who do not have CPA
-    3. Repeat placements up to 3 per creator until target budget
-    4. If budget not reached, pull in other creators by vector similarity
-    5. Never add creators with CPA above target CPA
+    1. Phase 1: Same category/brand CPA creators (under target CPA)
+    2. Phase 2: Cross-category/brand CPA creators (under target CPA)  
+    3. Phase 3: Vector-similar creators (no CPA data)
+    4. Budget optimization: Add more placements to existing creators (up to 3)
     """
     from app.models import CreatorVector
     from sqlalchemy import func
     import numpy as np
     
-    print("DEBUG: Starting vector-CPA allocation logic")
+    print("DEBUG: Starting enhanced budget-CPA allocation logic")
     
-    # Separate creators by CPA status
-    creators_with_cpa = []
-    creators_without_cpa = []
+    # Separate creators by phase and CPA status
+    phase1_creators = []  # Same category/brand with CPA
+    phase2_creators = []  # Cross category/brand with CPA
+    phase3_creators = []  # No CPA data
     
-    for creator_data in matched_creators:
+        for creator_data in matched_creators:
         performance_data = creator_data['performance_data']
-        if performance_data and performance_data.get('expected_cpa') is not None:
-            creators_with_cpa.append(creator_data)
+        phase = performance_data.get('phase', 3)
+        
+        if phase == 1 and performance_data.get('expected_cpa') is not None:
+            # Phase 1: Same category/brand with CPA
+            if plan_request.target_cpa is None or performance_data['expected_cpa'] <= plan_request.target_cpa:
+                phase1_creators.append(creator_data)
+        elif phase == 2 and performance_data.get('expected_cpa') is not None:
+            # Phase 2: Cross category/brand with CPA
+            if plan_request.target_cpa is None or performance_data['expected_cpa'] <= plan_request.target_cpa:
+                phase2_creators.append(creator_data)
         else:
-            creators_without_cpa.append(creator_data)
+            # Phase 3: No CPA data
+            phase3_creators.append(creator_data)
     
-    print(f"DEBUG: Found {len(creators_with_cpa)} creators with CPA, {len(creators_without_cpa)} without CPA")
-    
-    # Filter creators with CPA by target CPA constraint
-    if plan_request.target_cpa is not None:
-        filtered_cpa_creators = [
-            c for c in creators_with_cpa 
-            if c['performance_data']['expected_cpa'] <= plan_request.target_cpa
-        ]
-        print(f"DEBUG: After target CPA filter: {len(filtered_cpa_creators)} creators (target CPA: {plan_request.target_cpa})")
-    else:
-        filtered_cpa_creators = creators_with_cpa
+    print(f"DEBUG: Phase 1 (same CPA): {len(phase1_creators)}, Phase 2 (cross CPA): {len(phase2_creators)}, Phase 3 (no CPA): {len(phase3_creators)}")
     
     # Sort CPA creators by CPA (lowest first)
-    filtered_cpa_creators.sort(key=lambda x: x['performance_data']['expected_cpa'])
+    phase1_creators.sort(key=lambda x: x['performance_data']['expected_cpa'])
+    phase2_creators.sort(key=lambda x: x['performance_data']['expected_cpa'])
     
     # Get vector data for similarity matching
     creator_vectors = {}
-    if creators_without_cpa:
-        creator_ids = [c['creator'].creator_id for c in creators_without_cpa]
+    if phase3_creators:
+        creator_ids = [c['creator'].creator_id for c in phase3_creators]
         vectors = db.query(CreatorVector).filter(CreatorVector.creator_id.in_(creator_ids)).all()
         creator_vectors = {v.creator_id: v.vector for v in vectors}
         print(f"DEBUG: Loaded vectors for {len(creator_vectors)} creators")
@@ -891,9 +891,33 @@ def _allocate_creators_with_vector_cpa_logic(
     creator_placement_counts = {}
     remaining_budget = plan_request.budget
     
-    # Phase 1: Allocate CPA creators (up to 3 placements each)
-    print("DEBUG: Phase 1 - Allocating CPA creators")
-    for creator_data in filtered_cpa_creators:
+    # Phase 1: Same category/brand CPA creators
+    print("DEBUG: Phase 1 - Allocating same category/brand CPA creators")
+    for creator_data in phase1_creators:
+        if remaining_budget <= 0:
+            break
+            
+            creator = creator_data['creator']
+            performance_data = creator_data['performance_data']
+            creator_id = creator.creator_id
+            current_placements = creator_placement_counts.get(creator_id, 0)
+            
+        if current_placements >= 3:
+            continue
+            
+        # Calculate allocation
+        expected_clicks = performance_data.get('expected_clicks', 100)
+            expected_spend = cpc * expected_clicks
+            
+        if expected_spend <= remaining_budget:
+            picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
+            creator_placement_counts[creator_id] = current_placements + 1
+            remaining_budget -= expected_spend
+            print(f"DEBUG: Phase 1 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, placement {current_placements + 1})")
+    
+    # Phase 2: Cross category/brand CPA creators
+    print("DEBUG: Phase 2 - Allocating cross category/brand CPA creators")
+    for creator_data in phase2_creators:
         if remaining_budget <= 0:
             break
             
@@ -902,82 +926,75 @@ def _allocate_creators_with_vector_cpa_logic(
         creator_id = creator.creator_id
         current_placements = creator_placement_counts.get(creator_id, 0)
         
-        if current_placements >= 3:
-            continue
+            if current_placements >= 3:
+                continue
             
         # Calculate allocation
         expected_clicks = performance_data.get('expected_clicks', 100)
         expected_spend = cpc * expected_clicks
         
-        if expected_spend <= remaining_budget:
+            if expected_spend <= remaining_budget:
             picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
-            creator_placement_counts[creator_id] = current_placements + 1
+                creator_placement_counts[creator_id] = current_placements + 1
             remaining_budget -= expected_spend
-            print(f"DEBUG: Added CPA creator {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, placement {current_placements + 1})")
+            print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, placement {current_placements + 1})")
     
-    # Phase 2: Allocate vector-similar creators (up to 3 placements each)
-    print("DEBUG: Phase 2 - Allocating vector-similar creators")
-    if remaining_budget > 0 and creators_without_cpa:
+    # Phase 3: Vector-similar creators (no CPA data)
+    print("DEBUG: Phase 3 - Allocating vector-similar creators")
+    if remaining_budget > 0 and phase3_creators:
         # Sort by vector similarity to CPA creators
+        reference_creators = phase1_creators + phase2_creators
         vector_similar_creators = _sort_by_vector_similarity(
-            creators_without_cpa, filtered_cpa_creators, creator_vectors
+            phase3_creators, reference_creators, creator_vectors
         )
         
         for creator_data in vector_similar_creators:
             if remaining_budget <= 0:
                 break
                 
-            creator = creator_data['creator']
-            creator_id = creator.creator_id
-            current_placements = creator_placement_counts.get(creator_id, 0)
-            
-            if current_placements >= 3:
-                continue
+                creator = creator_data['creator']
+                creator_id = creator.creator_id
+                current_placements = creator_placement_counts.get(creator_id, 0)
+                
+                if current_placements >= 3:
+                    continue
                 
             # Calculate allocation
-            expected_clicks = creator.conservative_click_estimate or 100
-            expected_spend = cpc * expected_clicks
-            
-            if expected_spend <= remaining_budget:
+                    expected_clicks = creator.conservative_click_estimate or 100
+                expected_spend = cpc * expected_clicks
+                
+                if expected_spend <= remaining_budget:
                 picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
-                creator_placement_counts[creator_id] = current_placements + 1
+                    creator_placement_counts[creator_id] = current_placements + 1
                 remaining_budget -= expected_spend
-                print(f"DEBUG: Added vector-similar creator {creator.name} (placement {current_placements + 1})")
+                print(f"DEBUG: Phase 3 - Added {creator.name} (placement {current_placements + 1})")
     
-    # Phase 3: Fill remaining budget with other creators
-    print("DEBUG: Phase 3 - Filling remaining budget")
+    # Budget optimization: Add more placements to existing creators
+    print("DEBUG: Budget optimization - Adding more placements to existing creators")
     if remaining_budget > 0:
-        all_remaining_creators = creators_without_cpa + [
-            c for c in creators_with_cpa if c not in filtered_cpa_creators
-        ]
-        
-        # Sort by vector similarity
-        remaining_creators = _sort_by_vector_similarity(
-            all_remaining_creators, filtered_cpa_creators, creator_vectors
-        )
-        
-        for creator_data in remaining_creators:
+        # Try to add more placements to existing creators (up to 3 total per creator)
+        for creator_data in picked_creators:
             if remaining_budget <= 0:
-                break
-                
-            creator = creator_data['creator']
-            creator_id = creator.creator_id
-            current_placements = creator_placement_counts.get(creator_id, 0)
+                    break
             
-            if current_placements >= 3:
-                continue
-                
-            # Calculate allocation
-            expected_clicks = creator.conservative_click_estimate or 100
-            expected_spend = cpc * expected_clicks
-            
+                    creator = creator_data['creator']
+                    creator_id = creator.creator_id
+                    current_placements = creator_placement_counts.get(creator_id, 0)
+                    
+                    if current_placements >= 3:
+                        continue
+                    
+            # Calculate allocation for additional placement
+                            expected_clicks = creator.conservative_click_estimate or 100
+                    expected_spend = cpc * expected_clicks
+                    
             if expected_spend <= remaining_budget:
                 picked_creators.append(_create_plan_creator(creator, creator_data, cpc, plan_request))
-                creator_placement_counts[creator_id] = current_placements + 1
+                            creator_placement_counts[creator_id] = current_placements + 1
                 remaining_budget -= expected_spend
-                print(f"DEBUG: Added remaining creator {creator.name} (placement {current_placements + 1})")
+                print(f"DEBUG: Budget opt - Added {creator.name} (placement {current_placements + 1})")
     
-    print(f"DEBUG: Vector-CPA allocation complete - {len(picked_creators)} creators, ${plan_request.budget - remaining_budget:.2f} spent")
+    print(f"DEBUG: Enhanced allocation complete - {len(picked_creators)} creators, ${plan_request.budget - remaining_budget:.2f} spent")
     return picked_creators
 
 
