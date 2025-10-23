@@ -842,7 +842,7 @@ async def create_smart_plan(
                 if expected_cpa <= plan_request.target_cpa:
                     phase1_creators.append(creator_data)
                     print(f"DEBUG: Phase 1 - {creator.name} (CPA: {expected_cpa:.2f}) - TARGET category")
-            else:
+                else:
                     print(f"DEBUG: Phase 1 - Skipping {creator.name} - CPA {expected_cpa:.2f} exceeds target CPA {plan_request.target_cpa:.2f} in TARGET category")
         
         # Sort Phase 1 by CPA (lowest first)
@@ -860,7 +860,7 @@ async def create_smart_plan(
             
             if current_placements >= 3:
                 continue
-            
+                
             expected_clicks = performance_data.get('expected_clicks', 100)
             expected_spend = cpc * expected_clicks
             expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
@@ -908,7 +908,7 @@ async def create_smart_plan(
                     print(f"DEBUG: Phase 2 - {creator.name} failed in target category (CPA: {expected_cpa:.2f}) - will exclude from Phase 2")
         
         # Now find Phase 2 candidates (other categories, but not target category failures)
-            for creator_data in matched_creators:
+        for creator_data in matched_creators:
             creator = creator_data['creator']
             performance_data = creator_data['performance_data']
             
@@ -936,37 +936,37 @@ async def create_smart_plan(
             if remaining_budget <= 0:
                 break
                 
-                creator = creator_data['creator']
-                performance_data = creator_data['performance_data']
-                creator_id = creator.creator_id
-                current_placements = creator_placement_counts.get(creator_id, 0)
+            creator = creator_data['creator']
+            performance_data = creator_data['performance_data']
+            creator_id = creator.creator_id
+            current_placements = creator_placement_counts.get(creator_id, 0)
+            
+            if current_placements >= 3:
+                continue
                 
-                if current_placements >= 3:
-                    continue
-                
-                    expected_clicks = performance_data.get('expected_clicks', 100)
-                expected_spend = cpc * expected_clicks
+            expected_clicks = performance_data.get('expected_clicks', 100)
+            expected_spend = cpc * expected_clicks
             expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
-                
-                if expected_spend <= remaining_budget:
+            
+            if expected_spend <= remaining_budget:
                 # Add new creator (Phase 2 - first placement only)
-                    picked_creators.append(PlanCreator(
-                        creator_id=creator.creator_id,
-                        name=creator.name,
-                        acct_id=creator.acct_id,
+                picked_creators.append(PlanCreator(
+                    creator_id=creator.creator_id,
+                    name=creator.name,
+                    acct_id=creator.acct_id,
                     expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025),
                     expected_cpa=performance_data['expected_cpa'],
-                        clicks_per_day=expected_clicks / plan_request.horizon_days,
-                        expected_clicks=expected_clicks,
-                        expected_spend=expected_spend,
-                        expected_conversions=expected_conversions,
-                        value_ratio=creator_data['combined_score'],
+                    clicks_per_day=expected_clicks / plan_request.horizon_days,
+                    expected_clicks=expected_clicks,
+                    expected_spend=expected_spend,
+                    expected_conversions=expected_conversions,
+                    value_ratio=creator_data['combined_score'],
                     recommended_placements=1,
                     median_clicks_per_placement=performance_data.get('median_clicks_per_placement')
-                    ))
-                    total_spend += expected_spend
-                    total_conversions += expected_conversions
-                    remaining_budget -= expected_spend
+                ))
+                total_spend += expected_spend
+                total_conversions += expected_conversions
+                remaining_budget -= expected_spend
                 creator_placement_counts[creator_id] = 1
                 print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, spend: ${expected_spend:.2f})")
             else:
@@ -979,17 +979,17 @@ async def create_smart_plan(
             for creator_data in phase1_creators + phase2_creators:
                 if remaining_budget <= 0:
                     break
-            
-                    creator = creator_data['creator']
-                    performance_data = creator_data['performance_data']
-                    creator_id = creator.creator_id
-                    current_placements = creator_placement_counts.get(creator_id, 0)
                     
-                    if current_placements >= 3:
-                        continue
+                creator = creator_data['creator']
+                performance_data = creator_data['performance_data']
+                creator_id = creator.creator_id
+                current_placements = creator_placement_counts.get(creator_id, 0)
+                
+                if current_placements >= 3:
+                    continue
                     
-                        expected_clicks = performance_data.get('expected_clicks', 100)
-                    expected_spend = cpc * expected_clicks
+                expected_clicks = performance_data.get('expected_clicks', 100)
+                expected_spend = cpc * expected_clicks
                 expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
                 
                 if expected_spend <= remaining_budget:
@@ -1037,14 +1037,17 @@ async def create_smart_plan(
             for pc in picked_creators:
                 # Get vector data for this creator
                 creator = db.query(Creator).filter(Creator.creator_id == pc.creator_id).first()
-                if creator and creator.vector:
+                if creator and hasattr(creator, 'vector') and creator.vector:
                     try:
-                        # Access the actual vector array from CreatorVector object
-                        vector_data = creator.vector.vector
-                        if vector_data:
-                            anchor_vectors.append(vector_data)
+                        # Parse vector if it's stored as string
+                        if isinstance(creator.vector, str):
+                            import ast
+                            vector_data = ast.literal_eval(creator.vector)
+                        else:
+                            vector_data = creator.vector
+                        anchor_vectors.append(vector_data)
                     except Exception as e:
-                        print(f"DEBUG: Error accessing vector for creator {creator.creator_id}: {e}")
+                        print(f"DEBUG: Error parsing vector for creator {creator.creator_id}: {e}")
                         continue
             
             if anchor_vectors:
@@ -1062,10 +1065,12 @@ async def create_smart_plan(
                 vector_similarities = []
                 for creator in vector_creators:
                     try:
-                        # Access the actual vector array from CreatorVector object
-                        creator_vector = creator.vector.vector
-                        if not creator_vector:
-                            continue
+                        # Parse creator's vector
+                        if isinstance(creator.vector, str):
+                            import ast
+                            creator_vector = ast.literal_eval(creator.vector)
+                        else:
+                            creator_vector = creator.vector
                         
                         similarity = calculate_vector_similarity(creator_vector, anchor_vectors)
                         
@@ -1098,10 +1103,10 @@ async def create_smart_plan(
                     
                     if expected_spend <= remaining_budget:
                         # Add new vector-similar creator
-                            picked_creators.append(PlanCreator(
-                                creator_id=creator.creator_id,
-                                name=creator.name,
-                                acct_id=creator.acct_id,
+                        picked_creators.append(PlanCreator(
+                            creator_id=creator.creator_id,
+                            name=creator.name,
+                            acct_id=creator.acct_id,
                             expected_cvr=plan_request.advertiser_avg_cvr or 0.025,
                             expected_cpa=cpc / (plan_request.advertiser_avg_cvr or 0.025),
                             clicks_per_day=expected_clicks / plan_request.horizon_days,
@@ -1178,12 +1183,12 @@ async def create_smart_plan(
                                     remaining_budget -= expected_spend
                                     creator_placement_counts[creator_id] = new_placements
                                     print(f"DEBUG: Phase 5 - Updated {creator.name} to {new_placements} placements (spend: ${expected_spend:.2f} per placement)")
-                            added_creator = True
+                                    added_creator = True
+                                    break
+                        
+                        if not added_creator:
                             break
-            
-            if not added_creator:
-                break
-        
+                
                 print(f"DEBUG: Vector fallback complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
             else:
                 print(f"DEBUG: No anchor vectors found for similarity matching")
