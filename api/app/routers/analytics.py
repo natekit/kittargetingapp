@@ -138,6 +138,7 @@ def _batch_calculate_performance_data(creators, advertiser_id, category, db):
     for creator_id, data in performance_data.items():
         if data['total_clicks'] > 0 and data['total_conversions'] > 0:
             data['expected_cvr'] = data['total_conversions'] / data['total_clicks']
+            data['phase'] = 1  # Has performance data
         else:
             # Check for overall creator performance as fallback
             overall_clicks = db.query(func.sum(ClickUnique.unique_clicks)).filter(
@@ -149,8 +150,16 @@ def _batch_calculate_performance_data(creators, advertiser_id, category, db):
             
             if overall_clicks > 0 and overall_conversions > 0:
                 data['expected_cvr'] = overall_conversions / overall_clicks
+                data['phase'] = 2  # Has cross-performance data
             else:
                 data['expected_cvr'] = 0.025  # Default fallback
+                data['phase'] = 3  # No performance data
+        
+        # Add required fields for smart matching
+        data['historical_cvr'] = data['expected_cvr']
+        data['cross_clicks'] = 0
+        data['cross_conversions'] = 0
+        data['cross_cvr'] = 0.0
     
     print(f"DEBUG: Batch performance calculation complete - {len(performance_data)} creators processed")
     return performance_data
