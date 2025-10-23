@@ -1160,7 +1160,8 @@ async def create_smart_plan(
                 total_conversions += expected_conversions
                 remaining_budget -= expected_spend
                 creator_placement_counts[creator_id] = 1
-                print(f"DEBUG: Phase 1 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f if performance_data['expected_cpa'] else 'N/A'}, spend: ${expected_spend:.2f})")
+                cpa_str = f"{performance_data['expected_cpa']:.2f}" if performance_data['expected_cpa'] else 'N/A'
+                print(f"DEBUG: Phase 1 - Added {creator.name} (CPA: {cpa_str}, spend: ${expected_spend:.2f})")
             else:
                 print(f"DEBUG: Phase 1 - Skipping {creator.name} - too expensive (${expected_spend:.2f} > ${remaining_budget:.2f})")
         
@@ -1243,7 +1244,8 @@ async def create_smart_plan(
                 total_conversions += expected_conversions
                 remaining_budget -= expected_spend
                 creator_placement_counts[creator_id] = 1
-                print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {performance_data.get('expected_cpa', 'N/A'):.2f if performance_data.get('expected_cpa') else 'N/A'}, spend: ${expected_spend:.2f})")
+                cpa_str = f"{performance_data.get('expected_cpa', 0):.2f}" if performance_data.get('expected_cpa') else 'N/A'
+                print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {cpa_str}, spend: ${expected_spend:.2f})")
         
         # Phase 3: Add more placements to existing creators (up to 3 total per creator)
         print(f"DEBUG: Phase 3 - Adding more placements to existing creators with ${remaining_budget:.2f} remaining")
