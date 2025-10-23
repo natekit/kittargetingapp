@@ -218,7 +218,7 @@ export function PlannerPage() {
       creator.name,
       creator.acct_id,
       creator.expected_cvr.toFixed(4),
-      creator.expected_cpa.toFixed(2),
+      creator.expected_cpa ? creator.expected_cpa.toFixed(2) : 'N/A',
       creator.clicks_per_day.toFixed(2),
       creator.expected_clicks.toFixed(0),
       creator.expected_spend.toFixed(2),
@@ -597,6 +597,11 @@ export function PlannerPage() {
                 <CardTitle>Plan Results</CardTitle>
                 <CardDescription>
                   {plan.picked_creators.length} creators selected
+                  {plan.picked_creators.length > 50 && (
+                    <span className="ml-2 text-orange-600 font-medium">
+                      (Large plan - showing first 20, full data in CSV)
+                    </span>
+                  )}
                 </CardDescription>
               </div>
               <Button onClick={exportToCsv} variant="outline">
@@ -660,7 +665,9 @@ export function PlannerPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {plan.picked_creators.slice(0, 20).map((creator) => (
+                  {plan.picked_creators.slice(0, 20).map((creator) => {
+                    try {
+                      return (
                     <tr key={creator.creator_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{creator.name}</div>
@@ -670,7 +677,7 @@ export function PlannerPage() {
                         {(creator.expected_cvr * 100).toFixed(2)}%
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        ${creator.expected_cpa.toFixed(2)}
+                        {creator.expected_cpa ? `$${creator.expected_cpa.toFixed(2)}` : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {creator.expected_clicks.toFixed(0)}
@@ -718,7 +725,18 @@ export function PlannerPage() {
                         </td>
                       )}
                     </tr>
-                  ))}
+                      );
+                    } catch (error) {
+                      console.error('Error rendering creator:', creator.creator_id, error);
+                      return (
+                        <tr key={creator.creator_id} className="bg-red-50">
+                          <td colSpan={formData.use_smart_matching ? 7 : 6} className="px-6 py-4 text-sm text-red-600">
+                            Error rendering creator: {creator.name || creator.creator_id}
+                          </td>
+                        </tr>
+                      );
+                    }
+                  })}
                 </tbody>
               </table>
             </div>
