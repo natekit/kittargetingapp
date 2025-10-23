@@ -505,7 +505,7 @@ async def get_leaderboard(
         func.coalesce(conversions_subquery.c.avg_conversions, 0).label('avg_conversions'),
         case(
             (clicks_subquery.c.avg_clicks > 0, 
-            func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
+             func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
             else_=0.0
         ).label('avg_cvr')
     ).outerjoin(
@@ -518,10 +518,10 @@ async def get_leaderboard(
         main_query = main_query.add_columns(
             case(
                 (clicks_subquery.c.total_clicks > 0,
-                cpc / func.nullif(
-                    func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
-                    0
-                )),
+                 cpc / func.nullif(
+                     func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
+                     0
+                 )),
                 else_=None
             ).label('expected_cpa')
         )
@@ -1113,15 +1113,15 @@ async def create_smart_plan(
                 expected_cpa = performance_data.get('expected_cpa', float('inf')) if performance_data else float('inf')
                 print(f"DEBUG: Phase 1 - Using individual data for {creator.name} (CPA: {expected_cpa:.2f})")
             
-            # Phase 1: Only creators with CPA ≤ target CPA in TARGET category/campaign
-            if plan_request.target_cpa is not None and expected_cpa <= plan_request.target_cpa:
+            # Phase 1: Creators with CPA ≤ target CPA in TARGET category/campaign (or all if no target CPA)
+            if plan_request.target_cpa is None or expected_cpa <= plan_request.target_cpa:
                 phase1_creators.append(creator_data)
                 print(f"DEBUG: Phase 1 - {creator.name} (CPA: {expected_cpa:.2f}) - TARGET category")
             else:
                 print(f"DEBUG: Phase 1 - Skipping {creator.name} - CPA {expected_cpa:.2f} exceeds target CPA {plan_request.target_cpa:.2f} in TARGET category")
         
-        # Sort Phase 1 by CPA (lowest first)
-        phase1_creators.sort(key=lambda x: x['performance_data']['expected_cpa'])
+        # Sort Phase 1 by CPA (lowest first), handling None/inf values
+        phase1_creators.sort(key=lambda x: x['performance_data'].get('expected_cpa', float('inf')) or float('inf'))
         
         # Allocate Phase 1 creators
         for creator_data in phase1_creators:
@@ -1160,7 +1160,7 @@ async def create_smart_plan(
                 total_conversions += expected_conversions
                 remaining_budget -= expected_spend
                 creator_placement_counts[creator_id] = 1
-                print(f"DEBUG: Phase 1 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, spend: ${expected_spend:.2f})")
+                print(f"DEBUG: Phase 1 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f if performance_data['expected_cpa'] else 'N/A'}, spend: ${expected_spend:.2f})")
             else:
                 print(f"DEBUG: Phase 1 - Skipping {creator.name} - too expensive (${expected_spend:.2f} > ${remaining_budget:.2f})")
         
@@ -1186,51 +1186,64 @@ async def create_smart_plan(
                 print(f"DEBUG: Phase 2 - {creator.name} failed in target category (CPA: {expected_cpa:.2f}) - will exclude from Phase 2")
         
         # Now find Phase 2 candidates (other categories, but not target category failures)
-            for creator_data in matched_creators:
-                creator = creator_data['creator']
-                performance_data = creator_data['performance_data']
-                
-        # Sort Phase 2 by CPA (lowest first)
-        phase2_creators.sort(key=lambda x: x['performance_data']['expected_cpa'])
+        for creator_data in matched_creators:
+            creator = creator_data['creator']
+            performance_data = creator_data['performance_data']
+            
+            # Use batch performance data if available
+            if creator.creator_id in batch_performance_data:
+                batch_data = batch_performance_data[creator.creator_id]
+                expected_cpa = cpc / batch_data['expected_cvr'] if batch_data['expected_cvr'] > 0 else float('inf')
+            else:
+                expected_cpa = performance_data.get('expected_cpa', float('inf')) if performance_data else float('inf')
+            
+            # Phase 2: Other categories/campaigns creators with CPA ≤ target CPA (but exclude creators who failed in target category)
+            if (creator.creator_id not in target_category_failures and 
+                (plan_request.target_cpa is None or expected_cpa <= plan_request.target_cpa)):
+                phase2_creators.append(creator_data)
+                print(f"DEBUG: Phase 2 - {creator.name} (CPA: {expected_cpa:.2f}) - OTHER category")
+        
+        # Sort Phase 2 by CPA (lowest first), handling None/inf values
+        phase2_creators.sort(key=lambda x: x['performance_data'].get('expected_cpa', float('inf')) or float('inf'))
         
         # Allocate Phase 2 creators
         for creator_data in phase2_creators:
             if remaining_budget <= 0:
                 break
                 
-                creator = creator_data['creator']
-                performance_data = creator_data['performance_data']
-                creator_id = creator.creator_id
-                current_placements = creator_placement_counts.get(creator_id, 0)
-                
-                if current_placements >= 3:
-                    continue
-                
-                    expected_clicks = performance_data.get('expected_clicks', 100)
-                expected_spend = cpc * expected_clicks
+            creator = creator_data['creator']
+            performance_data = creator_data['performance_data']
+            creator_id = creator.creator_id
+            current_placements = creator_placement_counts.get(creator_id, 0)
+            
+            if current_placements >= 3:
+                continue
+            
+            expected_clicks = performance_data.get('expected_clicks', 100)
+            expected_spend = cpc * expected_clicks
             expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
-                
+            
             if expected_spend <= remaining_budget:
                 # Add new creator (Phase 2 - first placement only)
-                    picked_creators.append(PlanCreator(
-                        creator_id=creator.creator_id,
-                        name=creator.name,
-                        acct_id=creator.acct_id,
+                picked_creators.append(PlanCreator(
+                    creator_id=creator.creator_id,
+                    name=creator.name,
+                    acct_id=creator.acct_id,
                     expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025),
-                    expected_cpa=performance_data['expected_cpa'],
-                        clicks_per_day=expected_clicks / plan_request.horizon_days,
-                        expected_clicks=expected_clicks,
-                        expected_spend=expected_spend,
-                        expected_conversions=expected_conversions,
-                        value_ratio=creator_data['combined_score'],
+                    expected_cpa=performance_data.get('expected_cpa'),
+                    clicks_per_day=expected_clicks / plan_request.horizon_days,
+                    expected_clicks=expected_clicks,
+                    expected_spend=expected_spend,
+                    expected_conversions=expected_conversions,
+                    value_ratio=creator_data['combined_score'],
                     recommended_placements=1,
                     median_clicks_per_placement=performance_data.get('median_clicks_per_placement')
-                    ))
-                    total_spend += expected_spend
-                    total_conversions += expected_conversions
-                    remaining_budget -= expected_spend
-                    creator_placement_counts[creator_id] = 1
-            print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, spend: ${expected_spend:.2f})")
+                ))
+                total_spend += expected_spend
+                total_conversions += expected_conversions
+                remaining_budget -= expected_spend
+                creator_placement_counts[creator_id] = 1
+                print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {performance_data.get('expected_cpa', 'N/A'):.2f if performance_data.get('expected_cpa') else 'N/A'}, spend: ${expected_spend:.2f})")
         
         # Phase 3: Add more placements to existing creators (up to 3 total per creator)
         print(f"DEBUG: Phase 3 - Adding more placements to existing creators with ${remaining_budget:.2f} remaining")
@@ -1239,17 +1252,17 @@ async def create_smart_plan(
             for creator_data in phase1_creators + phase2_creators:
                 if remaining_budget <= 0:
                     break
-                
-                creator = creator_data['creator']
-                performance_data = creator_data['performance_data']
-                creator_id = creator.creator_id
-                current_placements = creator_placement_counts.get(creator_id, 0)
-                
+            
+                    creator = creator_data['creator']
+                    performance_data = creator_data['performance_data']
+                    creator_id = creator.creator_id
+                    current_placements = creator_placement_counts.get(creator_id, 0)
+                    
                 # Check placement limit (max 3 per creator)
-                if current_placements >= 3:
-                    continue
-                
-                expected_clicks = performance_data.get('expected_clicks', 100)
+                    if current_placements >= 3:
+                        continue
+                    
+                        expected_clicks = performance_data.get('expected_clicks', 100)
                 expected_spend = cpc * expected_clicks
                 expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
                 
@@ -1462,9 +1475,9 @@ async def create_smart_plan(
                                     remaining_budget -= expected_spend
                                     creator_placement_counts[creator_id] = new_placements
                                     print(f"DEBUG: Phase 5 - Updated {creator.name} to {new_placements} placements (spend: ${expected_spend:.2f} per placement)")
-                                added_creator = True
-                                break
-                        
+                            added_creator = True
+                            break
+            
                         if not added_creator:
                             break
                 
