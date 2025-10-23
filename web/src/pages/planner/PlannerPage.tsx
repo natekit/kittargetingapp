@@ -137,6 +137,33 @@ export function PlannerPage() {
         setError(getNoResultsMessage(requestData));
       } else {
         setPlan(data);
+        
+        // Auto-download CSV if email was provided
+        if (formData.email && formData.email.trim() !== '') {
+          console.log('Auto-downloading CSV for email:', formData.email);
+          const csvData = data.picked_creators.map(creator => ({
+            'Creator ID': creator.creator_id,
+            'Name': creator.name,
+            'Account ID': creator.acct_id,
+            'Expected CVR': creator.expected_cvr.toFixed(4),
+            'Expected CPA': creator.expected_cpa ? `$${creator.expected_cpa.toFixed(2)}` : 'N/A',
+            'Clicks Per Day': creator.clicks_per_day.toFixed(2),
+            'Expected Clicks': creator.expected_clicks.toFixed(2),
+            'Expected Spend': `$${creator.expected_spend.toFixed(2)}`,
+            'Expected Conversions': creator.expected_conversions.toFixed(2),
+            'Value Ratio': creator.value_ratio.toFixed(4),
+            'Recommended Placements': creator.recommended_placements,
+            'Median Clicks Per Placement': creator.median_clicks_per_placement ? creator.median_clicks_per_placement.toFixed(2) : 'N/A'
+          }));
+          
+          const headers = [
+            'Creator ID', 'Name', 'Account ID', 'Expected CVR', 'Expected CPA', 
+            'Clicks Per Day', 'Expected Clicks', 'Expected Spend', 'Expected Conversions',
+            'Value Ratio', 'Recommended Placements', 'Median Clicks Per Placement'
+          ];
+          
+          downloadAsCsv('kit_targeting_plan', csvData, headers);
+        }
       }
     } catch (error) {
       console.error('Error creating plan:', error);
@@ -597,6 +624,9 @@ export function PlannerPage() {
               </div>
             </div>
 
+            <div className="mb-4 text-sm text-gray-600">
+              Showing first 20 of {plan.picked_creators.length} creators. Full list available in CSV download.
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -630,7 +660,7 @@ export function PlannerPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {plan.picked_creators.map((creator) => (
+                  {plan.picked_creators.slice(0, 20).map((creator) => (
                     <tr key={creator.creator_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{creator.name}</div>
