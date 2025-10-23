@@ -257,7 +257,7 @@ async def get_leaderboard(
         func.coalesce(conversions_subquery.c.avg_conversions, 0).label('avg_conversions'),
         case(
             (clicks_subquery.c.avg_clicks > 0, 
-             func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
+            func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
             else_=0.0
         ).label('avg_cvr')
     ).outerjoin(
@@ -270,10 +270,10 @@ async def get_leaderboard(
         main_query = main_query.add_columns(
             case(
                 (clicks_subquery.c.total_clicks > 0,
-                 cpc / func.nullif(
-                     func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
-                     0
-                 )),
+                cpc / func.nullif(
+                    func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
+                    0
+                )),
                 else_=None
             ).label('expected_cpa')
         )
@@ -920,7 +920,7 @@ async def create_smart_plan(
                     print(f"DEBUG: Phase 2 - {creator.name} failed in target category (CPA: {expected_cpa:.2f}) - will exclude from Phase 2")
         
         # Now find Phase 2 candidates (other categories, but not target category failures)
-            for creator_data in matched_creators:
+        for creator_data in matched_creators:
             creator = creator_data['creator']
             performance_data = creator_data['performance_data']
             
@@ -960,9 +960,9 @@ async def create_smart_plan(
                 expected_spend = cpc * expected_clicks
             expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
                 
-                if expected_spend <= remaining_budget:
+            if expected_spend <= remaining_budget:
                 # Add new creator (Phase 2 - first placement only)
-                    picked_creators.append(PlanCreator(
+                picked_creators.append(PlanCreator(
                         creator_id=creator.creator_id,
                         name=creator.name,
                         acct_id=creator.acct_id,
@@ -976,9 +976,9 @@ async def create_smart_plan(
                     recommended_placements=1,
                     median_clicks_per_placement=performance_data.get('median_clicks_per_placement')
                     ))
-                    total_spend += expected_spend
-                    total_conversions += expected_conversions
-                    remaining_budget -= expected_spend
+                total_spend += expected_spend
+                total_conversions += expected_conversions
+                remaining_budget -= expected_spend
                 creator_placement_counts[creator_id] = 1
                 print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, spend: ${expected_spend:.2f})")
             else:
@@ -1069,7 +1069,7 @@ async def create_smart_plan(
                             import ast
                             vector_data = ast.literal_eval(creator.vector)
                             print(f"DEBUG: Parsed string vector: {vector_data}")
-                    else:
+                        else:
                             vector_data = creator.vector
                             print(f"DEBUG: Using direct vector: {vector_data}")
                         
@@ -1077,9 +1077,9 @@ async def create_smart_plan(
                         print(f"DEBUG: Added vector to anchor_vectors, total: {len(anchor_vectors)}")
                     except Exception as e:
                         print(f"DEBUG: Error parsing vector for creator {creator.creator_id}: {e}")
-                        import traceback
-                        print(f"DEBUG: Traceback: {traceback.format_exc()}")
-                        continue
+                    import traceback
+                    print(f"DEBUG: Traceback: {traceback.format_exc()}")
+                    continue
             
             if anchor_vectors:
                 print(f"DEBUG: Found {len(anchor_vectors)} anchor vectors for similarity matching")
@@ -1159,11 +1159,11 @@ async def create_smart_plan(
                             recommended_placements=1,
                             median_clicks_per_placement=None
                         ))
-                        total_spend += expected_spend
-                        total_conversions += expected_conversions
-                        remaining_budget -= expected_spend
-                        creator_placement_counts[creator.creator_id] = 1
-                        print(f"DEBUG: Phase 4 - Added vector-similar creator {creator.name} (similarity: {similarity:.3f}, spend: ${expected_spend:.2f})")
+                    total_spend += expected_spend
+                    total_conversions += expected_conversions
+                    remaining_budget -= expected_spend
+                    creator_placement_counts[creator.creator_id] = 1
+                    print(f"DEBUG: Phase 4 - Added vector-similar creator {creator.name} (similarity: {similarity:.3f}, spend: ${expected_spend:.2f})")
                 
                 # Phase 5: Add more placements to vector-matched creators
                 if remaining_budget > 0:
@@ -1228,9 +1228,9 @@ async def create_smart_plan(
                             added_creator = True
                             break
             
-            if not added_creator:
-                break
-        
+                        if not added_creator:
+                            break
+                
                 print(f"DEBUG: Vector fallback complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
             else:
                 print(f"DEBUG: No anchor vectors found for similarity matching")
