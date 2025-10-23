@@ -11,13 +11,52 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from datetime import date, timedelta
 from app.models import Creator, ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion, ConvUpload, DeclinedCreator, Placement
 from app.smart_matching import SmartMatchingService
 from app.db import get_db
 
 router = APIRouter()
+
+
+def calculate_vector_similarity(creator_vector, anchor_vectors):
+    """
+    Calculate cosine similarity between a creator's vector and multiple anchor vectors.
+    Returns the maximum similarity score. Optimized with numpy vectorization.
+    """
+    if not creator_vector or not anchor_vectors:
+        return 0.0
+    
+    try:
+        # Convert creator vector to numpy array
+        creator_vec = np.array(creator_vector, dtype=np.float32)
+        
+        # Convert all anchor vectors to numpy array at once (vectorization)
+        anchor_matrix = np.array(anchor_vectors, dtype=np.float32)
+        
+        # Calculate cosine similarities for all anchor vectors at once
+        # Normalize vectors
+        creator_norm = np.linalg.norm(creator_vec)
+        anchor_norms = np.linalg.norm(anchor_matrix, axis=1)
+        
+        # Avoid division by zero
+        if creator_norm == 0 or np.any(anchor_norms == 0):
+            return 0.0
+        
+        # Calculate dot products for all anchor vectors at once
+        dot_products = np.dot(anchor_matrix, creator_vec)
+        
+        # Calculate cosine similarities
+        similarities = dot_products / (creator_norm * anchor_norms)
+        
+        # Return maximum similarity
+        max_similarity = np.max(similarities)
+        return float(max_similarity)
+        
+    except Exception as e:
+        print(f"DEBUG: Vector similarity calculation error: {e}")
+        return 0.0
 
 
 def generate_plan_csv(plan_response, plan_request) -> str:
@@ -128,45 +167,6 @@ def send_plan_email(email: str, plan_response, plan_request):
     except Exception as e:
         print(f"DEBUG: Email sending error: {e}")
         return False
-
-
-def calculate_vector_similarity(creator_vector, anchor_vectors):
-    """
-    Calculate cosine similarity between a creator's vector and multiple anchor vectors.
-    Returns the maximum similarity score. Optimized with numpy vectorization.
-    """
-    if not creator_vector or not anchor_vectors:
-        return 0.0
-    
-    try:
-        # Convert creator vector to numpy array
-        creator_vec = np.array(creator_vector, dtype=np.float32)
-        
-        # Convert all anchor vectors to numpy array at once (vectorization)
-        anchor_matrix = np.array(anchor_vectors, dtype=np.float32)
-        
-        # Calculate cosine similarities for all anchor vectors at once
-        # Normalize vectors
-        creator_norm = np.linalg.norm(creator_vec)
-        anchor_norms = np.linalg.norm(anchor_matrix, axis=1)
-        
-        # Avoid division by zero
-        if creator_norm == 0 or np.any(anchor_norms == 0):
-            return 0.0
-        
-        # Calculate dot products for all anchor vectors at once
-        dot_products = np.dot(anchor_matrix, creator_vec)
-        
-        # Calculate cosine similarities
-        similarities = dot_products / (creator_norm * anchor_norms)
-        
-        # Return maximum similarity
-        max_similarity = np.max(similarities)
-        return float(max_similarity)
-        
-    except Exception as e:
-        print(f"DEBUG: Vector similarity calculation error: {e}")
-        return 0.0
 
 
 def _batch_calculate_performance_data(creators, advertiser_id, category, db):
@@ -484,7 +484,7 @@ async def get_leaderboard(
         func.coalesce(conversions_subquery.c.avg_conversions, 0).label('avg_conversions'),
         case(
             (clicks_subquery.c.avg_clicks > 0, 
-             func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
+            func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
             else_=0.0
         ).label('avg_cvr')
     ).outerjoin(
@@ -497,10 +497,10 @@ async def get_leaderboard(
         main_query = main_query.add_columns(
             case(
                 (clicks_subquery.c.total_clicks > 0,
-                 cpc / func.nullif(
-                     func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
-                     0
-                 )),
+                cpc / func.nullif(
+                    func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
+                    0
+                )),
                 else_=None
             ).label('expected_cpa')
         )
@@ -1096,7 +1096,7 @@ async def create_smart_plan(
             if plan_request.target_cpa is not None and expected_cpa <= plan_request.target_cpa:
                 phase1_creators.append(creator_data)
                 print(f"DEBUG: Phase 1 - {creator.name} (CPA: {expected_cpa:.2f}) - TARGET category")
-                else:
+            else:
                 print(f"DEBUG: Phase 1 - Skipping {creator.name} - CPA {expected_cpa:.2f} exceeds target CPA {plan_request.target_cpa:.2f} in TARGET category")
         
         # Sort Phase 1 by CPA (lowest first)
@@ -1189,7 +1189,7 @@ async def create_smart_plan(
                 expected_spend = cpc * expected_clicks
             expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
                 
-                if expected_spend <= remaining_budget:
+            if expected_spend <= remaining_budget:
                 # Add new creator (Phase 2 - first placement only)
                     picked_creators.append(PlanCreator(
                         creator_id=creator.creator_id,
@@ -1289,7 +1289,7 @@ async def create_smart_plan(
                         elif isinstance(creator.vector, str):
                             import ast
                             vector_data = ast.literal_eval(creator.vector)
-                    else:
+                        else:
                             vector_data = creator.vector
                         
                         anchor_vectors.append(vector_data)
@@ -1440,12 +1440,12 @@ async def create_smart_plan(
                                     remaining_budget -= expected_spend
                                     creator_placement_counts[creator_id] = new_placements
                                     print(f"DEBUG: Phase 5 - Updated {creator.name} to {new_placements} placements (spend: ${expected_spend:.2f} per placement)")
-                            added_creator = True
+                                added_creator = True
+                                break
+                        
+                        if not added_creator:
                             break
-            
-            if not added_creator:
-                break
-        
+                
                 print(f"DEBUG: Vector fallback complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
             else:
                 print(f"DEBUG: No anchor vectors found for similarity matching")
