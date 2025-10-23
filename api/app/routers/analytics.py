@@ -92,7 +92,7 @@ class PlanCreator(BaseModel):
     name: str
     acct_id: str
     expected_cvr: float
-    expected_cpa: float
+    expected_cpa: Optional[float] = None  # None for vector-similar creators with no historical data
     clicks_per_day: float
     expected_clicks: float
     expected_spend: float
@@ -1121,7 +1121,7 @@ async def create_smart_plan(
                                 'creator': creator,
                                 'similarity': similarity,
                                 'expected_clicks': creator.conservative_click_estimate or 100,
-                                'expected_conversions': (creator.conservative_click_estimate or 100) * (plan_request.advertiser_avg_cvr or 0.025),
+                                'expected_conversions': 0,  # No conversion expectations for vector-similar creators
                                 'expected_spend': cpc * (creator.conservative_click_estimate or 100)
                             })
                     except Exception as e:
@@ -1145,16 +1145,16 @@ async def create_smart_plan(
                     
                     if expected_spend <= remaining_budget:
                         # Add new vector-similar creator
-                            picked_creators.append(PlanCreator(
-                                creator_id=creator.creator_id,
-                                name=creator.name,
-                                acct_id=creator.acct_id,
+                        picked_creators.append(PlanCreator(
+                            creator_id=creator.creator_id,
+                            name=creator.name,
+                            acct_id=creator.acct_id,
                             expected_cvr=plan_request.advertiser_avg_cvr or 0.025,
-                            expected_cpa=cpc / (plan_request.advertiser_avg_cvr or 0.025),
+                            expected_cpa=None,  # No historical CPA data for vector-similar creators
                             clicks_per_day=expected_clicks / plan_request.horizon_days,
                             expected_clicks=expected_clicks,
                             expected_spend=expected_spend,
-                            expected_conversions=expected_conversions,
+                            expected_conversions=0,  # No conversion expectations for vector-similar creators
                             value_ratio=similarity,  # Use similarity as value ratio
                             recommended_placements=1,
                             median_clicks_per_placement=None
@@ -1163,7 +1163,7 @@ async def create_smart_plan(
                     total_conversions += expected_conversions
                     remaining_budget -= expected_spend
                     creator_placement_counts[creator.creator_id] = 1
-                    print(f"DEBUG: Phase 4 - Added vector-similar creator {creator.name} (similarity: {similarity:.3f}, spend: ${expected_spend:.2f})")
+                    print(f"DEBUG: Phase 4 - Added vector-similar creator {creator.name} (similarity: {similarity:.3f}, spend: ${expected_spend:.2f}) - NO HISTORICAL DATA")
                 
                 # Phase 5: Add more placements to vector-matched creators
                 if remaining_budget > 0:
