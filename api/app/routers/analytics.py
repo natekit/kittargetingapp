@@ -144,25 +144,46 @@ def send_plan_email(email: str, plan_response, plan_request):
         )
         msg.attach(attachment)
         
-        # Send email (you'll need to configure SMTP settings)
-        # For now, we'll just log the email content
-        print(f"DEBUG: Email would be sent to {email}")
+        # Send email via SMTP
+        print(f"DEBUG: Sending email to {email}")
         print(f"DEBUG: Email subject: {msg['Subject']}")
         print(f"DEBUG: CSV content length: {len(csv_content)} characters")
         
-        # TODO: Implement actual email sending with SMTP
-        # smtp_server = "smtp.gmail.com"  # or your SMTP server
-        # smtp_port = 587
-        # smtp_username = "your-email@gmail.com"
-        # smtp_password = "your-app-password"
-        # 
-        # server = smtplib.SMTP(smtp_server, smtp_port)
-        # server.starttls()
-        # server.login(smtp_username, smtp_password)
-        # server.send_message(msg)
-        # server.quit()
-        
-        return True
+        try:
+            # Check if email sending is enabled via environment variable
+            import os
+            email_enabled = os.getenv('EMAIL_SENDING_ENABLED', 'false').lower() == 'true'
+            
+            if not email_enabled:
+                print(f"DEBUG: Email sending disabled - would send to {email}")
+                print(f"DEBUG: To enable email sending, set EMAIL_SENDING_ENABLED=true")
+                return True
+            
+            # Get SMTP credentials from environment variables
+            smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+            smtp_port = int(os.getenv('SMTP_PORT', '587'))
+            smtp_username = os.getenv('SMTP_USERNAME')
+            smtp_password = os.getenv('SMTP_PASSWORD')
+            
+            if not smtp_username or not smtp_password:
+                print(f"DEBUG: SMTP credentials not configured - would send to {email}")
+                print(f"DEBUG: Set SMTP_USERNAME and SMTP_PASSWORD environment variables")
+                return True
+            
+            # Send email via SMTP
+            print(f"DEBUG: Sending email to {email} via {smtp_server}:{smtp_port}")
+            server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()
+            server.login(smtp_username, smtp_password)
+            server.send_message(msg)
+            server.quit()
+            print(f"DEBUG: Email sent successfully to {email}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"DEBUG: Email sending error: {e}")
+            return False
         
     except Exception as e:
         print(f"DEBUG: Email sending error: {e}")
@@ -1494,6 +1515,30 @@ async def create_smart_plan(
         import traceback
         print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Smart matching failed: {str(e)}")
+
+
+@router.get("/download-plan-csv")
+async def download_plan_csv(
+    plan_id: Optional[str] = Query(None, description="Plan ID for cached plan"),
+    db: Session = Depends(get_db)
+):
+    """
+    Download plan as CSV file.
+    This is a fallback endpoint for when email sending isn't configured.
+    """
+    try:
+        # For now, this is a placeholder endpoint
+        # In a full implementation, you'd cache the plan and return it here
+        print(f"DEBUG: CSV download requested for plan_id: {plan_id}")
+        
+        return {
+            "message": "CSV download endpoint - use the auto-download from the frontend",
+            "note": "The frontend automatically downloads CSV when email is provided"
+        }
+        
+    except Exception as e:
+        print(f"DEBUG: CSV download error: {e}")
+        raise HTTPException(status_code=500, detail=f"CSV download failed: {str(e)}")
     
 def _get_other_campaigns_clicks(creator: Creator, advertiser_id: Optional[int], category: Optional[str], db: Session) -> int:
     """Get click estimates from other campaigns for this creator."""
