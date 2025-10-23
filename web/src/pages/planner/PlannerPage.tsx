@@ -30,6 +30,8 @@ export function PlannerPage() {
     // Creator filtering fields
     include_acct_ids: '',
     exclude_acct_ids: '',
+    // Email export field
+    email: '',
   });
 
   useEffect(() => {
@@ -502,6 +504,27 @@ export function PlannerPage() {
                     Comma-separated list of Acct IDs to exclude from the plan
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Email Export Section */}
+            <div className="border-t pt-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Email Export (Optional)</h3>
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                  Email Address
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="mt-1"
+                  placeholder="your-email@example.com"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter an email address to receive the plan as a CSV attachment
+                </p>
               </div>
             </div>
 

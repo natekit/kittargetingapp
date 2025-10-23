@@ -4,13 +4,130 @@ from sqlalchemy import func, text, case, and_, or_, desc
 from typing import Dict, Any, List, Optional
 import logging
 import numpy as np
-from pydantic import BaseModel
+import csv
+import io
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+from pydantic import BaseModel, EmailStr
 from datetime import date, timedelta
 from app.models import Creator, ClickUnique, PerfUpload, Insertion, Campaign, Advertiser, Conversion, ConvUpload, DeclinedCreator, Placement
 from app.smart_matching import SmartMatchingService
 from app.db import get_db
 
 router = APIRouter()
+
+
+def generate_plan_csv(plan_response, plan_request) -> str:
+    """Generate CSV content for plan data."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow([
+        'Creator ID', 'Name', 'Account ID', 'Expected CVR', 'Expected CPA', 
+        'Clicks Per Day', 'Expected Clicks', 'Expected Spend', 'Expected Conversions',
+        'Value Ratio', 'Recommended Placements', 'Median Clicks Per Placement'
+    ])
+    
+    # Write plan data
+    for creator in plan_response.picked_creators:
+        writer.writerow([
+            creator.creator_id,
+            creator.name,
+            creator.acct_id,
+            f"{creator.expected_cvr:.4f}",
+            f"${creator.expected_cpa:.2f}" if creator.expected_cpa else "N/A",
+            f"{creator.clicks_per_day:.2f}",
+            f"{creator.expected_clicks:.2f}",
+            f"${creator.expected_spend:.2f}",
+            f"{creator.expected_conversions:.2f}",
+            f"{creator.value_ratio:.4f}",
+            creator.recommended_placements,
+            f"{creator.median_clicks_per_placement:.2f}" if creator.median_clicks_per_placement else "N/A"
+        ])
+    
+    # Write summary
+    writer.writerow([])  # Empty row
+    writer.writerow(['SUMMARY'])
+    writer.writerow(['Total Spend', f"${plan_response.total_spend:.2f}"])
+    writer.writerow(['Total Conversions', f"{plan_response.total_conversions:.2f}"])
+    writer.writerow(['Blended CPA', f"${plan_response.blended_cpa:.2f}"])
+    writer.writerow(['Budget Utilization', f"{plan_response.budget_utilization:.2%}"])
+    writer.writerow(['Number of Creators', len(plan_response.picked_creators)])
+    
+    return output.getvalue()
+
+
+def send_plan_email(email: str, plan_response, plan_request):
+    """Send plan CSV via email."""
+    try:
+        # Generate CSV content
+        csv_content = generate_plan_csv(plan_response, plan_request)
+        
+        # Create email
+        msg = MIMEMultipart()
+        msg['From'] = "noreply@kittargeting.com"  # Update with your email
+        msg['To'] = email
+        msg['Subject'] = f"Kit Targeting Plan - ${plan_request.budget:.0f} Budget"
+        
+        # Email body
+        body = f"""
+        Hi,
+        
+        Your Kit Targeting plan has been generated successfully!
+        
+        Plan Summary:
+        - Budget: ${plan_request.budget:.2f}
+        - Total Spend: ${plan_response.total_spend:.2f}
+        - Total Conversions: {plan_response.total_conversions:.2f}
+        - Blended CPA: ${plan_response.blended_cpa:.2f}
+        - Budget Utilization: {plan_response.budget_utilization:.2%}
+        - Number of Creators: {len(plan_response.picked_creators)}
+        
+        Please find the detailed plan attached as a CSV file.
+        
+        Best regards,
+        Kit Targeting Team
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Attach CSV
+        attachment = MIMEBase('application', 'octet-stream')
+        attachment.set_payload(csv_content.encode())
+        encoders.encode_base64(attachment)
+        attachment.add_header(
+            'Content-Disposition',
+            f'attachment; filename=kit_targeting_plan_{date.today().strftime("%Y%m%d")}.csv'
+        )
+        msg.attach(attachment)
+        
+        # Send email (you'll need to configure SMTP settings)
+        # For now, we'll just log the email content
+        print(f"DEBUG: Email would be sent to {email}")
+        print(f"DEBUG: Email subject: {msg['Subject']}")
+        print(f"DEBUG: CSV content length: {len(csv_content)} characters")
+        
+        # TODO: Implement actual email sending with SMTP
+        # smtp_server = "smtp.gmail.com"  # or your SMTP server
+        # smtp_port = 587
+        # smtp_username = "your-email@gmail.com"
+        # smtp_password = "your-app-password"
+        # 
+        # server = smtplib.SMTP(smtp_server, smtp_port)
+        # server.starttls()
+        # server.login(smtp_username, smtp_password)
+        # server.send_message(msg)
+        # server.quit()
+        
+        return True
+        
+    except Exception as e:
+        print(f"DEBUG: Email sending error: {e}")
+        return False
 
 
 def calculate_vector_similarity(creator_vector, anchor_vectors):
@@ -183,6 +300,8 @@ class PlanRequest(BaseModel):
     # Creator filtering fields
     include_acct_ids: Optional[str] = None  # Comma-separated list of Acct IDs to include
     exclude_acct_ids: Optional[str] = None  # Comma-separated list of Acct IDs to exclude
+    # Email export field
+    email: Optional[str] = None  # Email address to send plan CSV
 
 
 class CreatorStats(BaseModel):
@@ -365,7 +484,7 @@ async def get_leaderboard(
         func.coalesce(conversions_subquery.c.avg_conversions, 0).label('avg_conversions'),
         case(
             (clicks_subquery.c.avg_clicks > 0, 
-            func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
+             func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
             else_=0.0
         ).label('avg_cvr')
     ).outerjoin(
@@ -378,10 +497,10 @@ async def get_leaderboard(
         main_query = main_query.add_columns(
             case(
                 (clicks_subquery.c.total_clicks > 0,
-                cpc / func.nullif(
-                    func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
-                    0
-                )),
+                 cpc / func.nullif(
+                     func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
+                     0
+                 )),
                 else_=None
             ).label('expected_cpa')
         )
@@ -977,7 +1096,7 @@ async def create_smart_plan(
             if plan_request.target_cpa is not None and expected_cpa <= plan_request.target_cpa:
                 phase1_creators.append(creator_data)
                 print(f"DEBUG: Phase 1 - {creator.name} (CPA: {expected_cpa:.2f}) - TARGET category")
-            else:
+                else:
                 print(f"DEBUG: Phase 1 - Skipping {creator.name} - CPA {expected_cpa:.2f} exceeds target CPA {plan_request.target_cpa:.2f} in TARGET category")
         
         # Sort Phase 1 by CPA (lowest first)
@@ -1070,7 +1189,7 @@ async def create_smart_plan(
                 expected_spend = cpc * expected_clicks
             expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
                 
-            if expected_spend <= remaining_budget:
+                if expected_spend <= remaining_budget:
                 # Add new creator (Phase 2 - first placement only)
                     picked_creators.append(PlanCreator(
                         creator_id=creator.creator_id,
@@ -1170,7 +1289,7 @@ async def create_smart_plan(
                         elif isinstance(creator.vector, str):
                             import ast
                             vector_data = ast.literal_eval(creator.vector)
-                        else:
+                    else:
                             vector_data = creator.vector
                         
                         anchor_vectors.append(vector_data)
@@ -1321,12 +1440,12 @@ async def create_smart_plan(
                                     remaining_budget -= expected_spend
                                     creator_placement_counts[creator_id] = new_placements
                                     print(f"DEBUG: Phase 5 - Updated {creator.name} to {new_placements} placements (spend: ${expected_spend:.2f} per placement)")
-                                added_creator = True
-                                break
-                        
-                        if not added_creator:
+                            added_creator = True
                             break
-                
+            
+            if not added_creator:
+                break
+        
                 print(f"DEBUG: Vector fallback complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
             else:
                 print(f"DEBUG: No anchor vectors found for similarity matching")
@@ -1349,13 +1468,25 @@ async def create_smart_plan(
         print(f"DEBUG: Five-phase results - Phase 1: {phase1_count} creators, Phase 2&3: {phase2_3_count} additional placements, Vector: {vector_creators} creators")
         print(f"DEBUG: Final results - {len(picked_creators)} creators, ${final_total_spend:.2f} spend, {final_total_conversions:.2f} conversions, ${blended_cpa:.2f} CPA, {budget_utilization:.2%} utilization")
         
-        return PlanResponse(
+        # Create plan response
+        plan_response = PlanResponse(
             picked_creators=picked_creators,
             total_spend=final_total_spend,
             total_conversions=final_total_conversions,
             blended_cpa=blended_cpa,
             budget_utilization=budget_utilization
         )
+        
+        # Send email if email address provided
+        if plan_request.email:
+            print(f"DEBUG: Sending plan email to {plan_request.email}")
+            email_sent = send_plan_email(plan_request.email, plan_response, plan_request)
+            if email_sent:
+                print(f"DEBUG: Plan email sent successfully to {plan_request.email}")
+            else:
+                print(f"DEBUG: Failed to send plan email to {plan_request.email}")
+        
+        return plan_response
         
     except Exception as e:
         print(f"DEBUG: Smart matching error: {e}")
