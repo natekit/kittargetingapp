@@ -1478,7 +1478,6 @@ async def create_smart_plan(
         )
         
         # Send email if email address provided
-        print(f"DEBUG: Email field value: '{plan_request.email}'")
         if plan_request.email:
             print(f"DEBUG: Sending plan email to {plan_request.email}")
             email_sent = send_plan_email(plan_request.email, plan_response, plan_request)
@@ -1486,8 +1485,6 @@ async def create_smart_plan(
                 print(f"DEBUG: Plan email sent successfully to {plan_request.email}")
             else:
                 print(f"DEBUG: Failed to send plan email to {plan_request.email}")
-        else:
-            print("DEBUG: No email address provided, skipping email sending")
         
         return plan_response
         
