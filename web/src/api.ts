@@ -185,6 +185,9 @@ class ApiClient {
     target_cpa?: number;
     horizon_days: number;
     advertiser_avg_cvr?: number;
+    include_acct_ids?: string;
+    exclude_acct_ids?: string;
+    email?: string;
   }): Promise<PlanResponse> {
     return this.request<PlanResponse>('/api/plan', {
       method: 'POST',
@@ -206,6 +209,9 @@ class ApiClient {
     target_location?: string;
     target_interests?: string;
     use_smart_matching?: boolean;
+    include_acct_ids?: string;
+    exclude_acct_ids?: string;
+    email?: string;
   }): Promise<PlanResponse> {
     return this.request<PlanResponse>('/api/plan-smart', {
       method: 'POST',
