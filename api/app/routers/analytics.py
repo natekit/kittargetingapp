@@ -22,26 +22,38 @@ def calculate_vector_similarity(creator_vector, anchor_vectors):
         return 0.0
     
     try:
+        # Debug: Print types and values
+        print(f"DEBUG: creator_vector type: {type(creator_vector)}, value: {creator_vector}")
+        print(f"DEBUG: anchor_vectors type: {type(anchor_vectors)}, length: {len(anchor_vectors)}")
+        
         # Convert creator vector to numpy array
         creator_vec = np.array(creator_vector)
+        print(f"DEBUG: creator_vec shape: {creator_vec.shape}, type: {creator_vec.dtype}")
         
         max_similarity = 0.0
-        for anchor_vector in anchor_vectors:
+        for i, anchor_vector in enumerate(anchor_vectors):
             if anchor_vector:
+                print(f"DEBUG: anchor_vector[{i}] type: {type(anchor_vector)}, value: {anchor_vector}")
                 anchor_vec = np.array(anchor_vector)
+                print(f"DEBUG: anchor_vec[{i}] shape: {anchor_vec.shape}, type: {anchor_vec.dtype}")
                 
                 # Calculate cosine similarity
                 dot_product = np.dot(creator_vec, anchor_vec)
                 norm_creator = np.linalg.norm(creator_vec)
                 norm_anchor = np.linalg.norm(anchor_vec)
                 
+                print(f"DEBUG: dot_product: {dot_product}, norm_creator: {norm_creator}, norm_anchor: {norm_anchor}")
+                
                 if norm_creator > 0 and norm_anchor > 0:
                     similarity = dot_product / (norm_creator * norm_anchor)
                     max_similarity = max(max_similarity, similarity)
+                    print(f"DEBUG: similarity: {similarity}, max_similarity: {max_similarity}")
         
         return max_similarity
     except Exception as e:
         print(f"DEBUG: Vector similarity calculation error: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
         return 0.0
 
 
@@ -1037,17 +1049,33 @@ async def create_smart_plan(
             for pc in picked_creators:
                 # Get vector data for this creator
                 creator = db.query(Creator).filter(Creator.creator_id == pc.creator_id).first()
+                print(f"DEBUG: Processing creator {creator.creator_id if creator else 'None'}")
+                if creator:
+                    print(f"DEBUG: Creator has vector attribute: {hasattr(creator, 'vector')}")
+                    print(f"DEBUG: Creator vector value: {getattr(creator, 'vector', 'NO_VECTOR_ATTR')}")
+                    print(f"DEBUG: Creator vector type: {type(getattr(creator, 'vector', None))}")
+                
                 if creator and hasattr(creator, 'vector') and creator.vector:
                     try:
+                        print(f"DEBUG: Processing vector for creator {creator.creator_id}")
+                        print(f"DEBUG: Vector type: {type(creator.vector)}")
+                        print(f"DEBUG: Vector value: {creator.vector}")
+                        
                         # Parse vector if it's stored as string
                         if isinstance(creator.vector, str):
                             import ast
                             vector_data = ast.literal_eval(creator.vector)
+                            print(f"DEBUG: Parsed string vector: {vector_data}")
                         else:
                             vector_data = creator.vector
+                            print(f"DEBUG: Using direct vector: {vector_data}")
+                        
                         anchor_vectors.append(vector_data)
+                        print(f"DEBUG: Added vector to anchor_vectors, total: {len(anchor_vectors)}")
                     except Exception as e:
                         print(f"DEBUG: Error parsing vector for creator {creator.creator_id}: {e}")
+                        import traceback
+                        print(f"DEBUG: Traceback: {traceback.format_exc()}")
                         continue
             
             if anchor_vectors:
@@ -1065,14 +1093,22 @@ async def create_smart_plan(
                 vector_similarities = []
                 for creator in vector_creators:
                     try:
+                        print(f"DEBUG: Processing vector creator {creator.creator_id}")
+                        print(f"DEBUG: Creator vector type: {type(creator.vector)}")
+                        print(f"DEBUG: Creator vector value: {creator.vector}")
+                        
                         # Parse creator's vector
                         if isinstance(creator.vector, str):
                             import ast
                             creator_vector = ast.literal_eval(creator.vector)
+                            print(f"DEBUG: Parsed string vector: {creator_vector}")
                         else:
                             creator_vector = creator.vector
+                            print(f"DEBUG: Using direct vector: {creator_vector}")
                         
+                        print(f"DEBUG: Calling calculate_vector_similarity with creator_vector: {creator_vector}")
                         similarity = calculate_vector_similarity(creator_vector, anchor_vectors)
+                        print(f"DEBUG: Calculated similarity: {similarity}")
                         
                         if similarity >= 0.7:  # Minimum similarity threshold
                             vector_similarities.append({
