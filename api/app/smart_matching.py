@@ -35,7 +35,8 @@ class SmartMatchingService:
         horizon_days: int = 30,
         advertiser_avg_cvr: float = 0.025,
         include_acct_ids: Optional[str] = None,
-        exclude_acct_ids: Optional[str] = None
+        exclude_acct_ids: Optional[str] = None,
+        batch_performance_data: Optional[Dict[int, Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """
         Find creators using smart matching algorithm.
@@ -118,7 +119,7 @@ class SmartMatchingService:
         
         # Calculate final scores and rationale for three-phase creators
         final_creators = self._calculate_final_scores(
-            three_phase_creators, target_demographics, cpc, horizon_days
+            three_phase_creators, target_demographics, cpc, horizon_days, batch_performance_data
         )
         
         # Sort by tier first, then by combined score within each tier
@@ -373,11 +374,21 @@ class SmartMatchingService:
         creators: List[Dict[str, Any]], 
         target_demographics: Optional[Dict[str, Any]], 
         cpc: float, 
-        horizon_days: int
+        horizon_days: int,
+        batch_performance_data: Optional[Dict[int, Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """Calculate final combined scores for all creators."""
         for creator_data in creators:
             creator = creator_data['creator']
+            
+            # Use batch performance data if available, otherwise use individual data
+            if batch_performance_data and creator.creator_id in batch_performance_data:
+                batch_data = batch_performance_data[creator.creator_id]
+                # Update performance_data with batch data
+                creator_data['performance_data'] = self._create_performance_data_from_batch(
+                    creator, batch_data, cpc, horizon_days, 0.025
+                )
+                print(f"DEBUG: Using batch performance data for creator {creator.creator_id}")
             
             # Calculate performance score
             performance_data = creator_data['performance_data']

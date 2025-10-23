@@ -52,6 +52,110 @@ def calculate_vector_similarity(creator_vector, anchor_vectors):
         return 0.0
 
 
+def _batch_calculate_performance_data(creators, advertiser_id, category, db):
+    """
+    Pre-calculate all performance data in batch queries to eliminate N+1 query problem.
+    Returns a dictionary mapping creator_id to performance data.
+    """
+    if not creators:
+        return {}
+    
+    creator_ids = [c.creator_id for c in creators]
+    print(f"DEBUG: Batch calculating performance data for {len(creator_ids)} creators")
+    
+    # Batch query for clicks data
+    clicks_data = db.query(
+        Creator.creator_id,
+        func.sum(ClickUnique.unique_clicks).label('total_clicks'),
+        func.avg(ClickUnique.unique_clicks).label('avg_clicks_per_placement'),
+        func.count(ClickUnique.click_id).label('placement_count')
+    ).join(
+        ClickUnique, ClickUnique.creator_id == Creator.creator_id
+    ).join(
+        PerfUpload, PerfUpload.perf_upload_id == ClickUnique.perf_upload_id
+    ).join(
+        Insertion, Insertion.insertion_id == PerfUpload.insertion_id
+    ).join(
+        Campaign, Campaign.campaign_id == Insertion.campaign_id
+    ).filter(
+        Creator.creator_id.in_(creator_ids)
+    )
+    
+    # Add category/advertiser filters
+    if category:
+        clicks_data = clicks_data.join(
+            Advertiser, Advertiser.advertiser_id == Campaign.advertiser_id
+        ).filter(Advertiser.category == category)
+    elif advertiser_id:
+        clicks_data = clicks_data.filter(Campaign.advertiser_id == advertiser_id)
+    
+    clicks_results = clicks_data.group_by(Creator.creator_id).all()
+    
+    # Batch query for conversions data
+    conversions_data = db.query(
+        Creator.creator_id,
+        func.sum(Conversion.conversions).label('total_conversions')
+    ).join(
+        Conversion, Conversion.creator_id == Creator.creator_id
+    ).join(
+        ConvUpload, ConvUpload.conv_upload_id == Conversion.conv_upload_id
+    ).filter(
+        Creator.creator_id.in_(creator_ids)
+    )
+    
+    # Add category/advertiser filters for conversions
+    if category:
+        conversions_data = conversions_data.filter(ConvUpload.advertiser_id.in_(
+            db.query(Advertiser.advertiser_id).filter(Advertiser.category == category)
+        ))
+    elif advertiser_id:
+        conversions_data = conversions_data.filter(ConvUpload.advertiser_id == advertiser_id)
+    
+    conversions_results = conversions_data.group_by(Creator.creator_id).all()
+    
+    # Combine results into performance data dictionary
+    performance_data = {}
+    
+    # Process clicks data
+    for row in clicks_results:
+        creator_id = row.creator_id
+        performance_data[creator_id] = {
+            'total_clicks': row.total_clicks or 0,
+            'avg_clicks_per_placement': row.avg_clicks_per_placement or 0,
+            'placement_count': row.placement_count or 0,
+            'total_conversions': 0,
+            'expected_cvr': 0.025,  # Default fallback
+            'expected_cpa': None
+        }
+    
+    # Process conversions data
+    for row in conversions_results:
+        creator_id = row.creator_id
+        if creator_id in performance_data:
+            performance_data[creator_id]['total_conversions'] = row.total_conversions or 0
+    
+    # Calculate CVR and CPA for each creator
+    for creator_id, data in performance_data.items():
+        if data['total_clicks'] > 0 and data['total_conversions'] > 0:
+            data['expected_cvr'] = data['total_conversions'] / data['total_clicks']
+        else:
+            # Check for overall creator performance as fallback
+            overall_clicks = db.query(func.sum(ClickUnique.unique_clicks)).filter(
+                ClickUnique.creator_id == creator_id
+            ).scalar() or 0
+            overall_conversions = db.query(func.sum(Conversion.conversions)).filter(
+                Conversion.creator_id == creator_id
+            ).scalar() or 0
+            
+            if overall_clicks > 0 and overall_conversions > 0:
+                data['expected_cvr'] = overall_conversions / overall_clicks
+            else:
+                data['expected_cvr'] = 0.025  # Default fallback
+    
+    print(f"DEBUG: Batch performance calculation complete - {len(performance_data)} creators processed")
+    return performance_data
+
+
 class PlanRequest(BaseModel):
     category: Optional[str] = None
     advertiser_id: Optional[int] = None
@@ -799,6 +903,16 @@ async def create_smart_plan(
     
     try:
         print("DEBUG: Starting smart matching algorithm")
+        
+        # Pre-calculate performance data in batch to eliminate N+1 queries
+        print("DEBUG: Pre-calculating performance data in batch")
+        batch_performance_data = _batch_calculate_performance_data(
+            smart_service._get_base_creators_query(plan_request.advertiser_id, plan_request.category).all(),
+            plan_request.advertiser_id,
+            plan_request.category,
+            db
+        )
+        
         matched_creators = smart_service.find_smart_creators(
             advertiser_id=plan_request.advertiser_id,
             category=plan_request.category,
@@ -809,7 +923,8 @@ async def create_smart_plan(
             horizon_days=plan_request.horizon_days,
             advertiser_avg_cvr=plan_request.advertiser_avg_cvr or 0.025,
             include_acct_ids=plan_request.include_acct_ids,
-            exclude_acct_ids=plan_request.exclude_acct_ids
+            exclude_acct_ids=plan_request.exclude_acct_ids,
+            batch_performance_data=batch_performance_data  # Pass pre-calculated data
         )
         
         print(f"DEBUG: Smart matching found {len(matched_creators)} creators")
@@ -840,17 +955,21 @@ async def create_smart_plan(
             creator = creator_data['creator']
             performance_data = creator_data['performance_data']
             
-            # Phase 1: Only creators with CPA ≤ target CPA in TARGET category/campaign
-            if plan_request.target_cpa is not None and performance_data and performance_data.get('expected_cpa') is not None:
-                expected_cpa = performance_data['expected_cpa']
-                # Check if this is from target category/campaign (not other categories)
-                # For now, assume performance_data is from target category if it exists
-                # TODO: Add logic to verify this is target category data
-                if expected_cpa <= plan_request.target_cpa:
-                    phase1_creators.append(creator_data)
-                    print(f"DEBUG: Phase 1 - {creator.name} (CPA: {expected_cpa:.2f}) - TARGET category")
+            # Use batch performance data if available, otherwise fall back to individual data
+            if creator.creator_id in batch_performance_data:
+                batch_data = batch_performance_data[creator.creator_id]
+                expected_cpa = cpc / batch_data['expected_cvr'] if batch_data['expected_cvr'] > 0 else float('inf')
+                print(f"DEBUG: Phase 1 - Using batch data for {creator.name} (CVR: {batch_data['expected_cvr']:.4f}, CPA: {expected_cpa:.2f})")
             else:
-                    print(f"DEBUG: Phase 1 - Skipping {creator.name} - CPA {expected_cpa:.2f} exceeds target CPA {plan_request.target_cpa:.2f} in TARGET category")
+                expected_cpa = performance_data.get('expected_cpa', float('inf')) if performance_data else float('inf')
+                print(f"DEBUG: Phase 1 - Using individual data for {creator.name} (CPA: {expected_cpa:.2f})")
+            
+            # Phase 1: Only creators with CPA ≤ target CPA in TARGET category/campaign
+            if plan_request.target_cpa is not None and expected_cpa <= plan_request.target_cpa:
+                phase1_creators.append(creator_data)
+                print(f"DEBUG: Phase 1 - {creator.name} (CPA: {expected_cpa:.2f}) - TARGET category")
+            else:
+                print(f"DEBUG: Phase 1 - Skipping {creator.name} - CPA {expected_cpa:.2f} exceeds target CPA {plan_request.target_cpa:.2f} in TARGET category")
         
         # Sort Phase 1 by CPA (lowest first)
         phase1_creators.sort(key=lambda x: x['performance_data']['expected_cpa'])
@@ -901,18 +1020,21 @@ async def create_smart_plan(
         phase2_creators = []
         target_category_failures = set()  # Track creators who failed in target category
         
-        # First, identify creators who failed in target category
+        # First, identify creators who failed in target category using batch data
         for creator_data in matched_creators:
             creator = creator_data['creator']
             performance_data = creator_data['performance_data']
             
-            if (plan_request.target_cpa is not None and performance_data and 
-                performance_data.get('expected_cpa') is not None):
-                expected_cpa = performance_data['expected_cpa']
-                # If this is target category data and CPA exceeds target, mark as failure
-                if expected_cpa > plan_request.target_cpa:
-                    target_category_failures.add(creator.creator_id)
-                    print(f"DEBUG: Phase 2 - {creator.name} failed in target category (CPA: {expected_cpa:.2f}) - will exclude from Phase 2")
+            # Use batch performance data if available
+            if creator.creator_id in batch_performance_data:
+                batch_data = batch_performance_data[creator.creator_id]
+                expected_cpa = cpc / batch_data['expected_cvr'] if batch_data['expected_cvr'] > 0 else float('inf')
+            else:
+                expected_cpa = performance_data.get('expected_cpa', float('inf')) if performance_data else float('inf')
+            
+            if plan_request.target_cpa is not None and expected_cpa > plan_request.target_cpa:
+                target_category_failures.add(creator.creator_id)
+                print(f"DEBUG: Phase 2 - {creator.name} failed in target category (CPA: {expected_cpa:.2f}) - will exclude from Phase 2")
         
         # Now find Phase 2 candidates (other categories, but not target category failures)
             for creator_data in matched_creators:
