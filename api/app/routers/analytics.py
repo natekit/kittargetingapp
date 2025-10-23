@@ -16,44 +16,39 @@ router = APIRouter()
 def calculate_vector_similarity(creator_vector, anchor_vectors):
     """
     Calculate cosine similarity between a creator's vector and multiple anchor vectors.
-    Returns the maximum similarity score.
+    Returns the maximum similarity score. Optimized with numpy vectorization.
     """
     if not creator_vector or not anchor_vectors:
         return 0.0
     
     try:
-        # Debug: Print types and values
-        print(f"DEBUG: creator_vector type: {type(creator_vector)}, value: {creator_vector}")
-        print(f"DEBUG: anchor_vectors type: {type(anchor_vectors)}, length: {len(anchor_vectors)}")
-        
         # Convert creator vector to numpy array
-        creator_vec = np.array(creator_vector)
-        print(f"DEBUG: creator_vec shape: {creator_vec.shape}, type: {creator_vec.dtype}")
+        creator_vec = np.array(creator_vector, dtype=np.float32)
         
-        max_similarity = 0.0
-        for i, anchor_vector in enumerate(anchor_vectors):
-            if anchor_vector:
-                print(f"DEBUG: anchor_vector[{i}] type: {type(anchor_vector)}, value: {anchor_vector}")
-                anchor_vec = np.array(anchor_vector)
-                print(f"DEBUG: anchor_vec[{i}] shape: {anchor_vec.shape}, type: {anchor_vec.dtype}")
-                
-                # Calculate cosine similarity
-                dot_product = np.dot(creator_vec, anchor_vec)
-                norm_creator = np.linalg.norm(creator_vec)
-                norm_anchor = np.linalg.norm(anchor_vec)
-                
-                print(f"DEBUG: dot_product: {dot_product}, norm_creator: {norm_creator}, norm_anchor: {norm_anchor}")
-                
-                if norm_creator > 0 and norm_anchor > 0:
-                    similarity = dot_product / (norm_creator * norm_anchor)
-                    max_similarity = max(max_similarity, similarity)
-                    print(f"DEBUG: similarity: {similarity}, max_similarity: {max_similarity}")
+        # Convert all anchor vectors to numpy array at once (vectorization)
+        anchor_matrix = np.array(anchor_vectors, dtype=np.float32)
         
-        return max_similarity
+        # Calculate cosine similarities for all anchor vectors at once
+        # Normalize vectors
+        creator_norm = np.linalg.norm(creator_vec)
+        anchor_norms = np.linalg.norm(anchor_matrix, axis=1)
+        
+        # Avoid division by zero
+        if creator_norm == 0 or np.any(anchor_norms == 0):
+            return 0.0
+        
+        # Calculate dot products for all anchor vectors at once
+        dot_products = np.dot(anchor_matrix, creator_vec)
+        
+        # Calculate cosine similarities
+        similarities = dot_products / (creator_norm * anchor_norms)
+        
+        # Return maximum similarity
+        max_similarity = np.max(similarities)
+        return float(max_similarity)
+        
     except Exception as e:
         print(f"DEBUG: Vector similarity calculation error: {e}")
-        import traceback
-        print(f"DEBUG: Traceback: {traceback.format_exc()}")
         return 0.0
 
 
@@ -257,7 +252,7 @@ async def get_leaderboard(
         func.coalesce(conversions_subquery.c.avg_conversions, 0).label('avg_conversions'),
         case(
             (clicks_subquery.c.avg_clicks > 0, 
-            func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
+             func.coalesce(conversions_subquery.c.avg_conversions, 0) / func.nullif(clicks_subquery.c.avg_clicks, 0)),
             else_=0.0
         ).label('avg_cvr')
     ).outerjoin(
@@ -270,10 +265,10 @@ async def get_leaderboard(
         main_query = main_query.add_columns(
             case(
                 (clicks_subquery.c.total_clicks > 0,
-                cpc / func.nullif(
-                    func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
-                    0
-                )),
+                 cpc / func.nullif(
+                     func.coalesce(conversions_subquery.c.conversions, 0) / func.nullif(clicks_subquery.c.total_clicks, 0),
+                     0
+                 )),
                 else_=None
             ).label('expected_cpa')
         )
@@ -920,7 +915,7 @@ async def create_smart_plan(
                     print(f"DEBUG: Phase 2 - {creator.name} failed in target category (CPA: {expected_cpa:.2f}) - will exclude from Phase 2")
         
         # Now find Phase 2 candidates (other categories, but not target category failures)
-        for creator_data in matched_creators:
+            for creator_data in matched_creators:
             creator = creator_data['creator']
             performance_data = creator_data['performance_data']
             
@@ -960,9 +955,9 @@ async def create_smart_plan(
                 expected_spend = cpc * expected_clicks
             expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
                 
-            if expected_spend <= remaining_budget:
+                if expected_spend <= remaining_budget:
                 # Add new creator (Phase 2 - first placement only)
-                picked_creators.append(PlanCreator(
+                    picked_creators.append(PlanCreator(
                         creator_id=creator.creator_id,
                         name=creator.name,
                         acct_id=creator.acct_id,
@@ -976,9 +971,9 @@ async def create_smart_plan(
                     recommended_placements=1,
                     median_clicks_per_placement=performance_data.get('median_clicks_per_placement')
                     ))
-                total_spend += expected_spend
-                total_conversions += expected_conversions
-                remaining_budget -= expected_spend
+                    total_spend += expected_spend
+                    total_conversions += expected_conversions
+                    remaining_budget -= expected_spend
                 creator_placement_counts[creator_id] = 1
                 print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {performance_data['expected_cpa']:.2f}, spend: ${expected_spend:.2f})")
             else:
@@ -1044,42 +1039,32 @@ async def create_smart_plan(
         if remaining_budget > 0:
             print(f"DEBUG: Phase 4 - Vector fallback with ${remaining_budget:.2f} remaining budget")
             
-            # Get anchor vectors from successful creators (those already picked)
+            # Get anchor vectors from top 3 most successful creators (optimization)
             anchor_vectors = []
-            for pc in picked_creators:
+            # Sort picked creators by value_ratio (best performers first) and take top 3
+            top_creators = sorted(picked_creators, key=lambda x: x.value_ratio, reverse=True)[:3]
+            print(f"DEBUG: Using top {len(top_creators)} creators as anchor vectors for similarity matching")
+            
+            for pc in top_creators:
                 # Get vector data for this creator
                 creator = db.query(Creator).filter(Creator.creator_id == pc.creator_id).first()
-                print(f"DEBUG: Processing creator {creator.creator_id if creator else 'None'}")
-                if creator:
-                    print(f"DEBUG: Creator has vector attribute: {hasattr(creator, 'vector')}")
-                    print(f"DEBUG: Creator vector value: {getattr(creator, 'vector', 'NO_VECTOR_ATTR')}")
-                    print(f"DEBUG: Creator vector type: {type(getattr(creator, 'vector', None))}")
                 
                 if creator and hasattr(creator, 'vector') and creator.vector:
                     try:
-                        print(f"DEBUG: Processing vector for creator {creator.creator_id}")
-                        print(f"DEBUG: Vector type: {type(creator.vector)}")
-                        print(f"DEBUG: Vector value: {creator.vector}")
-                        
                         # Access the actual vector array from CreatorVector object
                         if hasattr(creator.vector, 'vector'):
                             vector_data = creator.vector.vector
-                            print(f"DEBUG: Accessed vector.vector: {vector_data}")
                         elif isinstance(creator.vector, str):
                             import ast
                             vector_data = ast.literal_eval(creator.vector)
-                            print(f"DEBUG: Parsed string vector: {vector_data}")
-                        else:
+                    else:
                             vector_data = creator.vector
-                            print(f"DEBUG: Using direct vector: {vector_data}")
                         
                         anchor_vectors.append(vector_data)
-                        print(f"DEBUG: Added vector to anchor_vectors, total: {len(anchor_vectors)}")
+                        print(f"DEBUG: Added anchor vector for creator {creator.creator_id}")
                     except Exception as e:
                         print(f"DEBUG: Error parsing vector for creator {creator.creator_id}: {e}")
-                    import traceback
-                    print(f"DEBUG: Traceback: {traceback.format_exc()}")
-                    continue
+                        continue
             
             if anchor_vectors:
                 print(f"DEBUG: Found {len(anchor_vectors)} anchor vectors for similarity matching")
@@ -1092,29 +1077,23 @@ async def create_smart_plan(
                 
                 print(f"DEBUG: Found {len(vector_creators)} creators with vectors but no historical data")
                 
-                # Calculate similarity scores for vector creators
+                # Calculate similarity scores for vector creators (optimized)
                 vector_similarities = []
+                print(f"DEBUG: Processing {len(vector_creators)} vector creators for similarity matching")
+                
                 for creator in vector_creators:
                     try:
-                        print(f"DEBUG: Processing vector creator {creator.creator_id}")
-                        print(f"DEBUG: Creator vector type: {type(creator.vector)}")
-                        print(f"DEBUG: Creator vector value: {creator.vector}")
-                        
                         # Access the actual vector array from CreatorVector object
                         if hasattr(creator.vector, 'vector'):
                             creator_vector = creator.vector.vector
-                            print(f"DEBUG: Accessed vector.vector: {creator_vector}")
                         elif isinstance(creator.vector, str):
                             import ast
                             creator_vector = ast.literal_eval(creator.vector)
-                            print(f"DEBUG: Parsed string vector: {creator_vector}")
                         else:
                             creator_vector = creator.vector
-                            print(f"DEBUG: Using direct vector: {creator_vector}")
                         
-                        print(f"DEBUG: Calling calculate_vector_similarity with creator_vector: {creator_vector}")
+                        # Calculate similarity using optimized function
                         similarity = calculate_vector_similarity(creator_vector, anchor_vectors)
-                        print(f"DEBUG: Calculated similarity: {similarity}")
                         
                         if similarity >= 0.7:  # Minimum similarity threshold
                             vector_similarities.append({
@@ -1132,6 +1111,11 @@ async def create_smart_plan(
                 vector_similarities.sort(key=lambda x: x['similarity'], reverse=True)
                 print(f"DEBUG: Found {len(vector_similarities)} vector-similar creators above 0.7 threshold")
                 
+                # Early exit if no vector-similar creators found
+                if not vector_similarities:
+                    print(f"DEBUG: No vector-similar creators found, skipping vector fallback")
+                    continue
+                
                 # Phase 4: Add vector-similar creators
                 for vector_data in vector_similarities:
                     if remaining_budget <= 0:
@@ -1145,10 +1129,10 @@ async def create_smart_plan(
                     
                     if expected_spend <= remaining_budget:
                         # Add new vector-similar creator
-                        picked_creators.append(PlanCreator(
-                            creator_id=creator.creator_id,
-                            name=creator.name,
-                            acct_id=creator.acct_id,
+                            picked_creators.append(PlanCreator(
+                                creator_id=creator.creator_id,
+                                name=creator.name,
+                                acct_id=creator.acct_id,
                             expected_cvr=plan_request.advertiser_avg_cvr or 0.025,
                             expected_cpa=None,  # No historical CPA data for vector-similar creators
                             clicks_per_day=expected_clicks / plan_request.horizon_days,
@@ -1228,9 +1212,9 @@ async def create_smart_plan(
                             added_creator = True
                             break
             
-                        if not added_creator:
-                            break
-                
+            if not added_creator:
+                break
+        
                 print(f"DEBUG: Vector fallback complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
             else:
                 print(f"DEBUG: No anchor vectors found for similarity matching")
