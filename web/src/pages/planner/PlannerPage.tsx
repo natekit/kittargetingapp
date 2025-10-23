@@ -122,6 +122,11 @@ export function PlannerPage() {
       if (formData.exclude_acct_ids && formData.exclude_acct_ids.trim() !== '') {
         requestData.exclude_acct_ids = formData.exclude_acct_ids.trim();
       }
+      
+      // Add email field
+      if (formData.email && formData.email.trim() !== '') {
+        requestData.email = formData.email.trim();
+      }
 
       const data = formData.use_smart_matching 
         ? await api.createSmartPlan(requestData)
