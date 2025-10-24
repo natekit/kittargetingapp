@@ -1117,7 +1117,7 @@ async def create_smart_plan(
             if plan_request.target_cpa is None or expected_cpa <= plan_request.target_cpa:
                 phase1_creators.append(creator_data)
                 print(f"DEBUG: Phase 1 - {creator.name} (CPA: {expected_cpa:.2f}) - TARGET category")
-            else:
+                else:
                 print(f"DEBUG: Phase 1 - Skipping {creator.name} - CPA {expected_cpa:.2f} exceeds target CPA {plan_request.target_cpa:.2f} in TARGET category")
         
         # Sort Phase 1 by CPA (lowest first), handling None/inf values
@@ -1187,7 +1187,7 @@ async def create_smart_plan(
                 print(f"DEBUG: Phase 2 - {creator.name} failed in target category (CPA: {expected_cpa:.2f}) - will exclude from Phase 2")
         
         # Now find Phase 2 candidates (other categories, but not target category failures)
-        for creator_data in matched_creators:
+            for creator_data in matched_creators:
             creator = creator_data['creator']
             performance_data = creator_data['performance_data']
             
@@ -1212,37 +1212,37 @@ async def create_smart_plan(
             if remaining_budget <= 0:
                 break
                 
-            creator = creator_data['creator']
-            performance_data = creator_data['performance_data']
-            creator_id = creator.creator_id
-            current_placements = creator_placement_counts.get(creator_id, 0)
-            
-            if current_placements >= 3:
-                continue
-            
-            expected_clicks = performance_data.get('expected_clicks', 100)
-            expected_spend = cpc * expected_clicks
+                creator = creator_data['creator']
+                performance_data = creator_data['performance_data']
+                creator_id = creator.creator_id
+                current_placements = creator_placement_counts.get(creator_id, 0)
+                
+                if current_placements >= 3:
+                    continue
+                
+                    expected_clicks = performance_data.get('expected_clicks', 100)
+                expected_spend = cpc * expected_clicks
             expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
-            
-            if expected_spend <= remaining_budget:
+                
+                if expected_spend <= remaining_budget:
                 # Add new creator (Phase 2 - first placement only)
-                picked_creators.append(PlanCreator(
-                    creator_id=creator.creator_id,
-                    name=creator.name,
-                    acct_id=creator.acct_id,
+                    picked_creators.append(PlanCreator(
+                        creator_id=creator.creator_id,
+                        name=creator.name,
+                        acct_id=creator.acct_id,
                     expected_cvr=performance_data.get('expected_cvr', plan_request.advertiser_avg_cvr or 0.025),
                     expected_cpa=performance_data.get('expected_cpa'),
-                    clicks_per_day=expected_clicks / plan_request.horizon_days,
-                    expected_clicks=expected_clicks,
-                    expected_spend=expected_spend,
-                    expected_conversions=expected_conversions,
-                    value_ratio=creator_data['combined_score'],
+                        clicks_per_day=expected_clicks / plan_request.horizon_days,
+                        expected_clicks=expected_clicks,
+                        expected_spend=expected_spend,
+                        expected_conversions=expected_conversions,
+                        value_ratio=creator_data['combined_score'],
                     recommended_placements=1,
                     median_clicks_per_placement=performance_data.get('median_clicks_per_placement')
-                ))
-                total_spend += expected_spend
-                total_conversions += expected_conversions
-                remaining_budget -= expected_spend
+                    ))
+                    total_spend += expected_spend
+                    total_conversions += expected_conversions
+                    remaining_budget -= expected_spend
                 creator_placement_counts[creator_id] = 1
                 cpa_str = f"{performance_data.get('expected_cpa', 0):.2f}" if performance_data.get('expected_cpa') else 'N/A'
                 print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {cpa_str}, spend: ${expected_spend:.2f})")
@@ -1326,7 +1326,7 @@ async def create_smart_plan(
                         elif isinstance(creator.vector, str):
                             import ast
                             vector_data = ast.literal_eval(creator.vector)
-                        else:
+                    else:
                             vector_data = creator.vector
                         
                         anchor_vectors.append(vector_data)
@@ -1480,9 +1480,9 @@ async def create_smart_plan(
                             added_creator = True
                             break
             
-                        if not added_creator:
-                            break
-                
+            if not added_creator:
+                break
+        
                 print(f"DEBUG: Vector fallback complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
             else:
                 print(f"DEBUG: No anchor vectors found for similarity matching")
@@ -1796,6 +1796,133 @@ async def get_historical_data(
         import traceback
         print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error getting historical data: {str(e)}")
+
+
+@router.get("/historical-data-csv")
+async def download_historical_data_csv(
+    advertiser_id: Optional[int] = Query(None, description="Advertiser ID"),
+    insertion_id: Optional[int] = Query(None, description="Insertion ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Download historical performance data as CSV file.
+    """
+    print(f"DEBUG: HISTORICAL CSV - Starting with advertiser_id={advertiser_id}, insertion_id={insertion_id}")
+    
+    if not advertiser_id and not insertion_id:
+        raise HTTPException(status_code=400, detail="Either advertiser_id or insertion_id must be provided")
+    
+    try:
+        # Get the same data as the historical-data endpoint
+        if insertion_id:
+            # Get creators for specific insertion
+            creators_from_placements = db.query(Creator).join(Placement).filter(Placement.insertion_id == insertion_id).distinct().all()
+            creators_from_conversions = db.query(Creator).join(Conversion).filter(Conversion.insertion_id == insertion_id).distinct().all()
+            creators_from_clicks = db.query(Creator).join(ClickUnique).join(PerfUpload).filter(PerfUpload.insertion_id == insertion_id).distinct().all()
+            
+            # Combine all unique creators
+            all_creator_ids = set()
+            all_creators = []
+            
+            for creator in creators_from_placements + creators_from_conversions + creators_from_clicks:
+                if creator.creator_id not in all_creator_ids:
+                    all_creator_ids.add(creator.creator_id)
+                    all_creators.append(creator)
+            
+            creators = all_creators
+        else:
+            # Get creators for advertiser
+            creators_query = db.query(Creator).join(Placement).join(Insertion).join(Campaign).filter(Campaign.advertiser_id == advertiser_id)
+            creators = creators_query.distinct().all()
+        
+        # Generate CSV content
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Creator ID', 'Name', 'Account ID', 'Topic', 'Age Range', 'Gender Skew', 
+            'Location', 'Interests', 'Conservative Click Estimate', 'Total Clicks', 
+            'Total Conversions', 'CVR'
+        ])
+        
+        # Write creator data
+        for creator in creators:
+            # Get click data
+            if insertion_id:
+                clicks_query = db.query(ClickUnique).join(PerfUpload).filter(
+                    ClickUnique.creator_id == creator.creator_id,
+                    PerfUpload.insertion_id == insertion_id
+                )
+            else:
+                clicks_query = db.query(ClickUnique).join(PerfUpload).join(Insertion).join(Campaign).filter(
+                    ClickUnique.creator_id == creator.creator_id,
+                    Campaign.advertiser_id == advertiser_id
+                )
+            
+            individual_clicks = clicks_query.all()
+            total_clicks = sum(record.unique_clicks for record in individual_clicks)
+            
+            # Get conversion data
+            if insertion_id:
+                conversions_query = db.query(Conversion).filter(
+                    Conversion.creator_id == creator.creator_id,
+                    Conversion.insertion_id == insertion_id
+                )
+            else:
+                conversions_query = db.query(Conversion).join(ConvUpload).filter(
+                    Conversion.creator_id == creator.creator_id,
+                    ConvUpload.advertiser_id == advertiser_id
+                )
+            
+            total_conversions = db.query(func.sum(Conversion.conversions)).filter(
+                Conversion.creator_id == creator.creator_id,
+                Conversion.insertion_id == insertion_id
+            ).scalar() or 0 if insertion_id else db.query(func.sum(Conversion.conversions)).join(ConvUpload).filter(
+                Conversion.creator_id == creator.creator_id,
+                ConvUpload.advertiser_id == advertiser_id
+            ).scalar() or 0
+            
+            # Calculate CVR
+            cvr = total_conversions / total_clicks if total_clicks > 0 else 0
+            
+            writer.writerow([
+                creator.creator_id,
+                creator.name,
+                creator.acct_id,
+                creator.topic or '',
+                creator.age_range or '',
+                creator.gender_skew or '',
+                creator.location or '',
+                creator.interests or '',
+                creator.conservative_click_estimate or 0,
+                total_clicks,
+                total_conversions,
+                f"{cvr:.4f}"
+            ])
+        
+        # Write summary
+        writer.writerow([])  # Empty row
+        writer.writerow(['SUMMARY'])
+        writer.writerow(['Total Creators', len(creators)])
+        writer.writerow(['Creators with Clicks', len([c for c in creators if total_clicks > 0])])
+        writer.writerow(['Creators with Conversions', len([c for c in creators if total_conversions > 0])])
+        
+        csv_content = output.getvalue()
+        
+        # Return CSV as downloadable file
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            io.BytesIO(csv_content.encode()),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=historical_data_{date.today().strftime('%Y%m%d')}.csv"}
+        )
+        
+    except Exception as e:
+        print(f"DEBUG: Historical CSV error: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error generating historical CSV: {str(e)}")
 
 
 @router.get("/debug/clicks")
