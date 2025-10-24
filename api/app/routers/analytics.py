@@ -1215,17 +1215,17 @@ async def create_smart_plan(
             if remaining_budget <= 0:
                 break
                 
-                creator = creator_data['creator']
-                performance_data = creator_data['performance_data']
-                creator_id = creator.creator_id
-                current_placements = creator_placement_counts.get(creator_id, 0)
-                
-                if current_placements >= 3:
-                    continue
-                
-                expected_clicks = performance_data.get('expected_clicks', 100)
-                expected_spend = cpc * expected_clicks
-                expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
+            creator = creator_data['creator']
+            performance_data = creator_data['performance_data']
+            creator_id = creator.creator_id
+            current_placements = creator_placement_counts.get(creator_id, 0)
+            
+            if current_placements >= 3:
+                continue
+            
+            expected_clicks = performance_data.get('expected_clicks', 100)
+            expected_spend = cpc * expected_clicks
+            expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
             
             if expected_spend <= remaining_budget:
                 # Add new creator (Phase 2 - first placement only)
