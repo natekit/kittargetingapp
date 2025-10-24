@@ -1379,6 +1379,10 @@ async def create_smart_plan(
                 
                 for creator in vector_creators:
                     try:
+                        # Debug: Track when Lark is being processed
+                        if creator.name == "Lark":
+                            print(f"DEBUG: Processing Lark (ID: {creator.creator_id}) for vector similarity")
+                        
                         # Access the actual vector array from CreatorVector object
                         if hasattr(creator.vector, 'vector'):
                             creator_vector = creator.vector.vector
@@ -1399,6 +1403,10 @@ async def create_smart_plan(
                                 'expected_conversions': 0,  # No conversion expectations for vector-similar creators
                                 'expected_spend': cpc * (creator.conservative_click_estimate or 100)
                             })
+                            
+                            # Debug: Track when Lark is added to vector_similarities
+                            if creator.name == "Lark":
+                                print(f"DEBUG: Added Lark to vector_similarities with similarity {similarity:.3f}")
                     except Exception as e:
                         print(f"DEBUG: Error processing vector for creator {creator.creator_id}: {e}")
                         continue
@@ -1423,6 +1431,12 @@ async def create_smart_plan(
                         similarity = vector_data['similarity']
                         
                         if expected_spend <= remaining_budget:
+                            # Check if creator is already in picked_creators
+                            already_exists = any(pc.creator_id == creator.creator_id for pc in picked_creators)
+                            if already_exists:
+                                print(f"DEBUG: Phase 4 - Skipping {creator.name} - already in picked_creators")
+                                continue
+                            
                             # Add new vector-similar creator
                             picked_creators.append(PlanCreator(
                                 creator_id=creator.creator_id,
@@ -1443,6 +1457,10 @@ async def create_smart_plan(
                             remaining_budget -= expected_spend
                             creator_placement_counts[creator.creator_id] = 1
                             print(f"DEBUG: Phase 4 - Added vector-similar creator {creator.name} (similarity: {similarity:.3f}, spend: ${expected_spend:.2f}) - NO HISTORICAL DATA")
+                            
+                            # Debug: Track when Lark is added to picked_creators
+                            if creator.name == "Lark":
+                                print(f"DEBUG: Lark added to picked_creators - total Lark entries: {sum(1 for pc in picked_creators if pc.name == 'Lark')}")
                     
                     # Phase 5: Add more placements to vector-matched creators
                     if remaining_budget > 0:
