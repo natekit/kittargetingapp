@@ -293,6 +293,9 @@ def _batch_calculate_performance_data(creators, advertiser_id, category, db):
                 data['expected_cvr'] = 0.025  # Default fallback
                 data['phase'] = 3  # No performance data
         
+        # Calculate expected CPA (will be calculated in the calling function with actual CPC)
+        data['expected_cpa'] = None  # Will be calculated with actual CPC in smart planner
+        
         # Add required fields for smart matching
         data['historical_cvr'] = data['expected_cvr']
         data['cross_clicks'] = 0
@@ -1250,57 +1253,71 @@ async def create_smart_plan(
         # Phase 3: Add more placements to existing creators (up to 3 total per creator)
         print(f"DEBUG: Phase 3 - Adding more placements to existing creators with ${remaining_budget:.2f} remaining")
         if remaining_budget > 0:
-            # Try to add more placements to existing creators
-            for creator_data in phase1_creators + phase2_creators:
-                if remaining_budget <= 0:
-                    break
+            # Try to add more placements to existing creators in multiple passes
+            max_iterations = len(phase1_creators + phase2_creators) * 3
+            iteration = 0
             
+            while remaining_budget > 0 and iteration < max_iterations:
+                iteration += 1
+                added_placement = False
+                
+                for creator_data in phase1_creators + phase2_creators:
+                    if remaining_budget <= 0:
+                        break
+                    
                     creator = creator_data['creator']
                     performance_data = creator_data['performance_data']
                     creator_id = creator.creator_id
                     current_placements = creator_placement_counts.get(creator_id, 0)
                     
-                # Check placement limit (max 3 per creator)
+                    # Check placement limit (max 3 per creator)
                     if current_placements >= 3:
                         continue
                     
-                        expected_clicks = performance_data.get('expected_clicks', 100)
-                expected_spend = cpc * expected_clicks
-                expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
-                
-                if expected_spend <= remaining_budget:
-                    # Update existing creator - add another placement
-                    existing_creator = None
-                    for i, pc in enumerate(picked_creators):
-                        if pc.creator_id == creator_id:
-                            existing_creator = i
-                            break
+                    expected_clicks = performance_data.get('expected_clicks', 100)
+                    expected_spend = cpc * expected_clicks
+                    expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
                     
-                    if existing_creator is not None:
-                        pc = picked_creators[existing_creator]
-                        new_placements = pc.recommended_placements + 1
+                    if expected_spend <= remaining_budget:
+                        # Update existing creator - add another placement
+                        existing_creator = None
+                        for i, pc in enumerate(picked_creators):
+                            if pc.creator_id == creator_id:
+                                existing_creator = i
+                                break
                         
-                        # Update the existing creator with multiplied values
-                        picked_creators[existing_creator] = PlanCreator(
-                            creator_id=pc.creator_id,
-                            name=pc.name,
-                            acct_id=pc.acct_id,
-                            expected_cvr=pc.expected_cvr,
-                            expected_cpa=pc.expected_cpa,
-                            clicks_per_day=pc.clicks_per_day,
-                            expected_clicks=expected_clicks * new_placements,
-                            expected_spend=expected_spend * new_placements,
-                            expected_conversions=expected_conversions * new_placements,
-                            value_ratio=pc.value_ratio,
-                            recommended_placements=new_placements,
-                            median_clicks_per_placement=pc.median_clicks_per_placement
-                        )
-                        
-                        total_spend += expected_spend
-                        total_conversions += expected_conversions
-                        remaining_budget -= expected_spend
-                        creator_placement_counts[creator_id] = new_placements
-                        print(f"DEBUG: Phase 3 - Updated {creator.name} to {new_placements} placements (spend: ${expected_spend:.2f} per placement)")
+                        if existing_creator is not None:
+                            pc = picked_creators[existing_creator]
+                            new_placements = pc.recommended_placements + 1
+                            
+                            # Update the existing creator with multiplied values
+                            picked_creators[existing_creator] = PlanCreator(
+                                creator_id=pc.creator_id,
+                                name=pc.name,
+                                acct_id=pc.acct_id,
+                                expected_cvr=pc.expected_cvr,
+                                expected_cpa=pc.expected_cpa,
+                                clicks_per_day=pc.clicks_per_day,
+                                expected_clicks=expected_clicks * new_placements,
+                                expected_spend=expected_spend * new_placements,
+                                expected_conversions=expected_conversions * new_placements,
+                                value_ratio=pc.value_ratio,
+                                recommended_placements=new_placements,
+                                median_clicks_per_placement=pc.median_clicks_per_placement
+                            )
+                            
+                            total_spend += expected_spend
+                            total_conversions += expected_conversions
+                            remaining_budget -= expected_spend
+                            creator_placement_counts[creator_id] = new_placements
+                            added_placement = True
+                            print(f"DEBUG: Phase 3 - Updated {creator.name} to {new_placements} placements (spend: ${expected_spend:.2f} per placement)")
+                            break  # Break to start next iteration
+                
+                # If no placements were added, break to prevent infinite loop
+                if not added_placement:
+                    print(f"DEBUG: Phase 3 - No more placements can be added, breaking")
+                    break
         
         print(f"DEBUG: Three-phase CPA enforcement complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining, {len(picked_creators)} total placements")
         
