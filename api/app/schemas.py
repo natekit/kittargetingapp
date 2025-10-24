@@ -83,20 +83,32 @@ class PlanRequest(BaseModel):
 class PlanCreator(BaseModel):
     creator_id: int
     name: str
+    acct_id: str
+    expected_cvr: float
+    expected_cpa: Optional[float] = None
+    clicks_per_day: float
     expected_clicks: float
-    expected_conversions: float
     expected_spend: float
-    cpc: float
-    cvr: float
+    expected_conversions: float
+    value_ratio: float
+    recommended_placements: int
+    median_clicks_per_placement: Optional[float] = None
+    # Smart matching fields
+    matching_rationale: Optional[str] = None
+    tier: Optional[int] = None
+    performance_score: Optional[float] = None
+    demographic_score: Optional[float] = None
+    topic_score: Optional[float] = None
+    similarity_score: Optional[float] = None
+    combined_score: Optional[float] = None
 
 
 class PlanResponse(BaseModel):
-    plan_id: str
-    total_budget: float
-    estimated_clicks: float
-    estimated_conversions: float
-    estimated_cpa: Optional[float]
-    creators: List[PlanCreator]
+    picked_creators: List[PlanCreator]
+    total_spend: float
+    total_conversions: float
+    blended_cpa: float
+    budget_utilization: float
 
 
 class LeaderboardEntry(BaseModel):
