@@ -1254,26 +1254,36 @@ async def create_smart_plan(
         print(f"DEBUG: Phase 3 - Adding more placements to existing creators with ${remaining_budget:.2f} remaining")
         if remaining_budget > 0:
             # Try to add more placements to existing creators in multiple passes
-            max_iterations = len(phase1_creators + phase2_creators) * 3
+            max_iterations = len(picked_creators) * 3
             iteration = 0
             
             while remaining_budget > 0 and iteration < max_iterations:
                 iteration += 1
                 added_placement = False
                 
-                for creator_data in phase1_creators + phase2_creators:
+                # Only iterate through creators who are already in picked_creators
+                for pc in picked_creators:
                     if remaining_budget <= 0:
                         break
                     
-                    creator = creator_data['creator']
-                    performance_data = creator_data['performance_data']
-                    creator_id = creator.creator_id
+                    creator_id = pc.creator_id
                     current_placements = creator_placement_counts.get(creator_id, 0)
                     
                     # Check placement limit (max 3 per creator)
                     if current_placements >= 3:
                         continue
                     
+                    # Find the original creator data to get performance metrics
+                    creator_data = None
+                    for cd in phase1_creators + phase2_creators:
+                        if cd['creator'].creator_id == creator_id:
+                            creator_data = cd
+                            break
+                    
+                    if creator_data is None:
+                        continue
+                    
+                    performance_data = creator_data['performance_data']
                     expected_clicks = performance_data.get('expected_clicks', 100)
                     expected_spend = cpc * expected_clicks
                     expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
@@ -1281,8 +1291,8 @@ async def create_smart_plan(
                     if expected_spend <= remaining_budget:
                         # Update existing creator - add another placement
                         existing_creator = None
-                        for i, pc in enumerate(picked_creators):
-                            if pc.creator_id == creator_id:
+                        for i, existing_pc in enumerate(picked_creators):
+                            if existing_pc.creator_id == creator_id:
                                 existing_creator = i
                                 break
                         
