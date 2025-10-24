@@ -141,6 +141,7 @@ export function PlannerPage() {
         // Auto-download CSV if email was provided
         if (formData.email && formData.email.trim() !== '') {
           console.log('Auto-downloading CSV for email:', formData.email);
+          console.log('DEBUG: First creator data:', data.picked_creators[0]);
           const csvData = data.picked_creators.map(creator => ({
             'Creator ID': creator.creator_id,
             'Name': creator.name,
@@ -156,11 +157,15 @@ export function PlannerPage() {
             'Median Clicks Per Placement': creator.median_clicks_per_placement ? creator.median_clicks_per_placement.toFixed(2) : 'N/A'
           }));
           
+          console.log('DEBUG: CSV data sample:', csvData[0]);
+          
           const headers = [
             'Creator ID', 'Name', 'Account ID', 'Expected CVR', 'Expected CPA', 
             'Clicks Per Day', 'Expected Clicks', 'Expected Spend', 'Expected Conversions',
             'Value Ratio', 'Recommended Placements', 'Median Clicks Per Placement'
           ];
+          
+          console.log('DEBUG: CSV headers:', headers);
           
           downloadAsCsv('kit_targeting_plan', csvData, headers);
         }
