@@ -142,6 +142,7 @@ export function PlannerPage() {
         if (formData.email && formData.email.trim() !== '') {
           console.log('Auto-downloading CSV for email:', formData.email);
           console.log('DEBUG: First creator data:', data.picked_creators[0]);
+          console.log('DEBUG: recommended_placements field:', data.picked_creators[0]?.recommended_placements);
           const csvData = data.picked_creators.map(creator => ({
             'Creator ID': creator.creator_id,
             'Name': creator.name,
@@ -153,7 +154,7 @@ export function PlannerPage() {
             'Expected Spend': `$${creator.expected_spend.toFixed(2)}`,
             'Expected Conversions': creator.expected_conversions.toFixed(2),
             'Value Ratio': creator.value_ratio.toFixed(4),
-            'Recommended Placements': creator.recommended_placements,
+            'Recommended Placements': creator.recommended_placements || 1,
             'Median Clicks Per Placement': creator.median_clicks_per_placement ? creator.median_clicks_per_placement.toFixed(2) : 'N/A'
           }));
           
