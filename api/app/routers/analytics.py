@@ -1168,10 +1168,11 @@ async def create_smart_plan(
             else:
                 print(f"DEBUG: Phase 1 - Skipping {creator.name} - too expensive (${expected_spend:.2f} > ${remaining_budget:.2f})")
         
-        # Phase 2: Other categories/campaigns creators with CPA ≤ target CPA (but exclude creators who failed in target category)
+        # Phase 2: Other categories/campaigns creators with CPA ≤ target CPA (but exclude creators who failed in target category AND who were already added in Phase 1)
         print(f"DEBUG: Phase 2 - Other categories/campaigns creators with CPA ≤ target CPA")
         phase2_creators = []
         target_category_failures = set()  # Track creators who failed in target category
+        phase1_creator_ids = {pc.creator_id for pc in picked_creators}  # Track creators already added in Phase 1
         
         # First, identify creators who failed in target category using batch data
         for creator_data in matched_creators:
@@ -1189,7 +1190,7 @@ async def create_smart_plan(
                 target_category_failures.add(creator.creator_id)
                 print(f"DEBUG: Phase 2 - {creator.name} failed in target category (CPA: {expected_cpa:.2f}) - will exclude from Phase 2")
         
-        # Now find Phase 2 candidates (other categories, but not target category failures)
+        # Now find Phase 2 candidates (other categories, but not target category failures AND not already added in Phase 1)
         for creator_data in matched_creators:
             creator = creator_data['creator']
             performance_data = creator_data['performance_data']
@@ -1201,11 +1202,14 @@ async def create_smart_plan(
             else:
                 expected_cpa = performance_data.get('expected_cpa', float('inf')) if performance_data else float('inf')
             
-            # Phase 2: Other categories/campaigns creators with CPA ≤ target CPA (but exclude creators who failed in target category)
+            # Phase 2: Other categories/campaigns creators with CPA ≤ target CPA (but exclude creators who failed in target category AND who were already added in Phase 1)
             if (creator.creator_id not in target_category_failures and 
+                creator.creator_id not in phase1_creator_ids and  # Exclude creators already added in Phase 1
                 (plan_request.target_cpa is None or expected_cpa <= plan_request.target_cpa)):
                 phase2_creators.append(creator_data)
                 print(f"DEBUG: Phase 2 - {creator.name} (CPA: {expected_cpa:.2f}) - OTHER category")
+            elif creator.creator_id in phase1_creator_ids:
+                print(f"DEBUG: Phase 2 - Skipping {creator.name} - already added in Phase 1")
         
         # Sort Phase 2 by CPA (lowest first), handling None/inf values
         phase2_creators.sort(key=lambda x: x['performance_data'].get('expected_cpa', float('inf')) or float('inf'))
@@ -1365,10 +1369,11 @@ async def create_smart_plan(
             if anchor_vectors:
                 print(f"DEBUG: Found {len(anchor_vectors)} anchor vectors for similarity matching")
                 
-                # Find creators with no historical data but with vectors
+                # Find creators with no historical data but with vectors (exclude creators already in plan)
+                existing_creator_ids = {pc.creator_id for pc in picked_creators}
                 vector_creators = db.query(Creator).filter(
                     Creator.vector != None,
-                    ~Creator.creator_id.in_([pc.creator_id for pc in picked_creators])
+                    ~Creator.creator_id.in_(existing_creator_ids)
                 ).all()
                 
                 print(f"DEBUG: Found {len(vector_creators)} creators with vectors but no historical data")
@@ -1431,7 +1436,7 @@ async def create_smart_plan(
                         similarity = vector_data['similarity']
                         
                         if expected_spend <= remaining_budget:
-                            # Check if creator is already in picked_creators
+                            # Check if creator is already in picked_creators (double-check)
                             already_exists = any(pc.creator_id == creator.creator_id for pc in picked_creators)
                             if already_exists:
                                 print(f"DEBUG: Phase 4 - Skipping {creator.name} - already in picked_creators")
