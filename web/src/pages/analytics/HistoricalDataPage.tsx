@@ -174,7 +174,18 @@ export function HistoricalDataPage() {
           {/* Creator Details */}
           <Card>
             <CardHeader>
-              <CardTitle>Creator Performance Data</CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle>Creator Performance Data</CardTitle>
+                <Button 
+                  onClick={() => api.downloadHistoricalDataCSV(
+                    formData.advertiser_id || undefined,
+                    formData.insertion_id || undefined
+                  )}
+                  variant="outline"
+                >
+                  Download CSV
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">

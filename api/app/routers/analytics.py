@@ -1117,7 +1117,7 @@ async def create_smart_plan(
             if plan_request.target_cpa is None or expected_cpa <= plan_request.target_cpa:
                 phase1_creators.append(creator_data)
                 print(f"DEBUG: Phase 1 - {creator.name} (CPA: {expected_cpa:.2f}) - TARGET category")
-                else:
+            else:
                 print(f"DEBUG: Phase 1 - Skipping {creator.name} - CPA {expected_cpa:.2f} exceeds target CPA {plan_request.target_cpa:.2f} in TARGET category")
         
         # Sort Phase 1 by CPA (lowest first), handling None/inf values
@@ -1187,7 +1187,7 @@ async def create_smart_plan(
                 print(f"DEBUG: Phase 2 - {creator.name} failed in target category (CPA: {expected_cpa:.2f}) - will exclude from Phase 2")
         
         # Now find Phase 2 candidates (other categories, but not target category failures)
-            for creator_data in matched_creators:
+        for creator_data in matched_creators:
             creator = creator_data['creator']
             performance_data = creator_data['performance_data']
             
@@ -1220,13 +1220,13 @@ async def create_smart_plan(
                 if current_placements >= 3:
                     continue
                 
-                    expected_clicks = performance_data.get('expected_clicks', 100)
+                expected_clicks = performance_data.get('expected_clicks', 100)
                 expected_spend = cpc * expected_clicks
-            expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
-                
-                if expected_spend <= remaining_budget:
+                expected_conversions = performance_data.get('expected_conversions', expected_clicks * (plan_request.advertiser_avg_cvr or 0.025))
+            
+            if expected_spend <= remaining_budget:
                 # Add new creator (Phase 2 - first placement only)
-                    picked_creators.append(PlanCreator(
+                picked_creators.append(PlanCreator(
                         creator_id=creator.creator_id,
                         name=creator.name,
                         acct_id=creator.acct_id,
@@ -1239,10 +1239,10 @@ async def create_smart_plan(
                         value_ratio=creator_data['combined_score'],
                     recommended_placements=1,
                     median_clicks_per_placement=performance_data.get('median_clicks_per_placement')
-                    ))
-                    total_spend += expected_spend
-                    total_conversions += expected_conversions
-                    remaining_budget -= expected_spend
+                ))
+                total_spend += expected_spend
+                total_conversions += expected_conversions
+                remaining_budget -= expected_spend
                 creator_placement_counts[creator_id] = 1
                 cpa_str = f"{performance_data.get('expected_cpa', 0):.2f}" if performance_data.get('expected_cpa') else 'N/A'
                 print(f"DEBUG: Phase 2 - Added {creator.name} (CPA: {cpa_str}, spend: ${expected_spend:.2f})")
@@ -1326,7 +1326,7 @@ async def create_smart_plan(
                         elif isinstance(creator.vector, str):
                             import ast
                             vector_data = ast.literal_eval(creator.vector)
-                    else:
+                        else:
                             vector_data = creator.vector
                         
                         anchor_vectors.append(vector_data)
@@ -1480,9 +1480,9 @@ async def create_smart_plan(
                             added_creator = True
                             break
             
-            if not added_creator:
-                break
-        
+                        if not added_creator:
+                            break
+                
                 print(f"DEBUG: Vector fallback complete - ${total_spend:.2f} spent, ${remaining_budget:.2f} remaining")
             else:
                 print(f"DEBUG: No anchor vectors found for similarity matching")
@@ -1865,23 +1865,15 @@ async def download_historical_data_csv(
             
             # Get conversion data
             if insertion_id:
-                conversions_query = db.query(Conversion).filter(
+                total_conversions = db.query(func.sum(Conversion.conversions)).filter(
                     Conversion.creator_id == creator.creator_id,
                     Conversion.insertion_id == insertion_id
-                )
+                ).scalar() or 0
             else:
-                conversions_query = db.query(Conversion).join(ConvUpload).filter(
+                total_conversions = db.query(func.sum(Conversion.conversions)).join(ConvUpload).filter(
                     Conversion.creator_id == creator.creator_id,
                     ConvUpload.advertiser_id == advertiser_id
-                )
-            
-            total_conversions = db.query(func.sum(Conversion.conversions)).filter(
-                Conversion.creator_id == creator.creator_id,
-                Conversion.insertion_id == insertion_id
-            ).scalar() or 0 if insertion_id else db.query(func.sum(Conversion.conversions)).join(ConvUpload).filter(
-                Conversion.creator_id == creator.creator_id,
-                ConvUpload.advertiser_id == advertiser_id
-            ).scalar() or 0
+                ).scalar() or 0
             
             # Calculate CVR
             cvr = total_conversions / total_clicks if total_clicks > 0 else 0
@@ -1905,8 +1897,6 @@ async def download_historical_data_csv(
         writer.writerow([])  # Empty row
         writer.writerow(['SUMMARY'])
         writer.writerow(['Total Creators', len(creators)])
-        writer.writerow(['Creators with Clicks', len([c for c in creators if total_clicks > 0])])
-        writer.writerow(['Creators with Conversions', len([c for c in creators if total_conversions > 0])])
         
         csv_content = output.getvalue()
         

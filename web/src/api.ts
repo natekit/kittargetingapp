@@ -227,6 +227,22 @@ class ApiClient {
     return this.request<HistoricalDataResponse>(`/api/historical-data?${params}`);
   }
 
+  async downloadHistoricalDataCSV(advertiser_id?: number, insertion_id?: number): Promise<void> {
+    const params = new URLSearchParams();
+    if (advertiser_id) params.append('advertiser_id', advertiser_id.toString());
+    if (insertion_id) params.append('insertion_id', insertion_id.toString());
+    
+    const url = `${this.baseUrl}/api/historical-data-csv?${params}`;
+    
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `historical_data_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   async getCampaignForecast(campaign_id: number): Promise<CampaignForecastResponse> {
     return this.request<CampaignForecastResponse>(`/api/campaign-forecast?campaign_id=${campaign_id}`);
   }
