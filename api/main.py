@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import core, seed, uploads, analytics, declined_creators
@@ -45,3 +46,10 @@ def read_root():
 def health_check():
     """Health check endpoint for Render and other services."""
     return {"status": "healthy", "service": "Kit Targeting API"}
+
+
+# Catch-all OPTIONS handler to gracefully handle preflight requests from services
+# that may omit standard CORS headers (e.g., some automated probes/screenshots)
+@app.options("/{full_path:path}")
+async def preflight_handler(full_path: str):
+    return Response(status_code=204)
