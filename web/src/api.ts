@@ -246,6 +246,18 @@ class ApiClient {
   async getCampaignForecast(campaign_id: number): Promise<CampaignForecastResponse> {
     return this.request<CampaignForecastResponse>(`/api/campaign-forecast?campaign_id=${campaign_id}`);
   }
+
+  async downloadDeclinedCreatorsCSV(): Promise<void> {
+    const url = `${this.baseUrl}/api/declined-creators-csv`;
+    
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `declined_creators_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 }
 
 export const api = new ApiClient(API_URL);

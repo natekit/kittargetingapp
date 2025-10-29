@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routers import core, seed, uploads, analytics
+from app.routers import core, seed, uploads, analytics, declined_creators
 
 app = FastAPI(title="Kit Targeting App API", version="1.0.0")
 
@@ -19,6 +19,7 @@ app.include_router(core.router, prefix="/api", tags=["core"])
 app.include_router(seed.router, prefix="/api", tags=["seed"])
 app.include_router(uploads.router, prefix="/api", tags=["uploads"])
 app.include_router(analytics.router, prefix="/api", tags=["analytics"])
+app.include_router(declined_creators.router, prefix="/api", tags=["declined-creators"])
 
 
 @app.get("/")

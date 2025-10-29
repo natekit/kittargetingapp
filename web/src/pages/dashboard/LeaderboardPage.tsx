@@ -213,16 +213,28 @@ export function LeaderboardPage() {
                 </CardDescription>
               </div>
             </div>
-            <Button 
-              onClick={exportToCsv} 
-              variant="outline"
-              className="border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300 font-semibold"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Export CSV
-            </Button>
+            <div className="flex space-x-2">
+              <Button 
+                onClick={exportToCsv} 
+                variant="outline"
+                className="border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300 font-semibold"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export CSV
+              </Button>
+              <Button 
+                onClick={() => api.downloadDeclinedCreatorsCSV()} 
+                variant="outline"
+                className="border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 font-semibold"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download Declined Creators
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
