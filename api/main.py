@@ -6,14 +6,26 @@ from app.routers import core, seed, uploads, analytics, declined_creators
 app = FastAPI(title="Kit Targeting App API", version="1.0.0")
 
 # Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods including OPTIONS
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+# Use regex pattern in production to allow all origins (for public API)
+# This handles Vercel screenshot service and other legitimate services
+if settings.APP_ENV == "production":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"https?://.*",  # Allow all HTTP/HTTPS origins
+        allow_credentials=False,  # Cannot use credentials with regex origins
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 
 # Mount routers
 app.include_router(core.router, prefix="/api", tags=["core"])
