@@ -21,10 +21,15 @@ async def download_declined_creators_csv(
     
     try:
         # Get all declined creators with joined data
+        # Using explicit column selection to ensure acct_id is included
         declined_creators = db.query(
-            DeclinedCreator,
-            Creator.name,
-            Creator.acct_id,
+            DeclinedCreator.declined_id,
+            DeclinedCreator.creator_id,
+            DeclinedCreator.advertiser_id,
+            DeclinedCreator.declined_at,
+            DeclinedCreator.reason,
+            Creator.name.label("creator_name"),
+            Creator.acct_id.label("creator_acct_id"),
             Advertiser.name.label("advertiser_name")
         ).join(
             Creator, Creator.creator_id == DeclinedCreator.creator_id
@@ -38,22 +43,26 @@ async def download_declined_creators_csv(
         output = io.StringIO()
         writer = csv.writer(output)
         
-        # Write header
+        # Write header - making sure Account ID is clearly labeled
         writer.writerow([
-            'Declined ID', 'Creator ID', 'Creator Name', 'Account ID', 
+            'Declined ID', 'Creator ID', 'Account ID', 'Creator Name', 
             'Advertiser Name', 'Declined At', 'Reason'
         ])
         
         # Write declined creator data
-        for dc in declined_creators:
+        for idx, dc in enumerate(declined_creators):
+            # Debug log first few to verify acct_id is present
+            if idx < 3:
+                print(f"DEBUG: Declined creator {idx+1} - Creator ID: {dc.creator_id}, Account ID: {dc.creator_acct_id}, Name: {dc.creator_name}")
+            
             writer.writerow([
-                dc.DeclinedCreator.declined_id,
-                dc.DeclinedCreator.creator_id,
-                dc.name,
-                dc.acct_id,
+                dc.declined_id,
+                dc.creator_id,
+                dc.creator_acct_id,  # Explicitly use the labeled acct_id
+                dc.creator_name,
                 dc.advertiser_name,
-                dc.DeclinedCreator.declined_at.isoformat() if dc.DeclinedCreator.declined_at else '',
-                dc.DeclinedCreator.reason or ''
+                dc.declined_at.isoformat() if dc.declined_at else '',
+                dc.reason or ''
             ])
         
         csv_content = output.getvalue()
