@@ -29,5 +29,7 @@ def read_root():
 
 
 @app.get("/health")
+@app.get("/healthz")
 def health_check():
-    return {"status": "healthy"}
+    """Health check endpoint for Render and other services."""
+    return {"status": "healthy", "service": "Kit Targeting API"}
