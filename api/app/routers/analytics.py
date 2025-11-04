@@ -2288,3 +2288,110 @@ async def get_campaign_forecast(
         import traceback
         print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error getting campaign forecast: {str(e)}")
+
+
+@router.get("/debug/conservative-estimates")
+async def debug_conservative_estimates(
+    acct_id: Optional[str] = Query(None, description="Filter by specific account ID"),
+    campaign_id: Optional[int] = Query(None, description="Check creators in forecast for this campaign"),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Sanity check endpoint to verify conservative_click_estimate values.
+    Shows which creators have estimates and which are showing 0 in forecasts.
+    """
+    print(f"DEBUG: Conservative estimates check - acct_id={acct_id}, campaign_id={campaign_id}")
+    
+    try:
+        # Query creators
+        query = db.query(
+            Creator.creator_id,
+            Creator.name,
+            Creator.acct_id,
+            Creator.conservative_click_estimate
+        )
+        
+        if acct_id:
+            query = query.filter(Creator.acct_id == acct_id)
+        
+        creators = query.all()
+        
+        # Build response with detailed info
+        creator_data = []
+        total_with_estimate = 0
+        total_without_estimate = 0
+        total_zero_estimate = 0
+        
+        for creator in creators:
+            estimate = creator.conservative_click_estimate
+            has_estimate = estimate is not None and estimate > 0
+            
+            if has_estimate:
+                total_with_estimate += 1
+            elif estimate == 0:
+                total_zero_estimate += 1
+            else:
+                total_without_estimate += 1
+            
+            creator_data.append({
+                'creator_id': creator.creator_id,
+                'name': creator.name,
+                'acct_id': creator.acct_id,
+                'conservative_click_estimate': estimate,
+                'has_estimate': has_estimate,
+                'estimate_value': estimate if estimate is not None else 'NULL'
+            })
+        
+        # If campaign_id provided, also check forecast for this campaign
+        forecast_info = None
+        if campaign_id:
+            print(f"DEBUG: Checking forecast for campaign_id={campaign_id}")
+            try:
+                # Get forecast data
+                forecast_response = await get_campaign_forecast(campaign_id, db)
+                forecast_data = forecast_response.get('forecast_data', [])
+                
+                # Find creators with 0 forecasted_clicks
+                zero_forecast_creators = []
+                for entry in forecast_data:
+                    if entry.get('forecasted_clicks', 0) == 0:
+                        # Look up the creator's conservative_click_estimate
+                        creator = db.query(Creator).filter(
+                            Creator.creator_id == entry['creator_id']
+                        ).first()
+                        
+                        zero_forecast_creators.append({
+                            'creator_id': entry['creator_id'],
+                            'creator_name': entry['creator_name'],
+                            'creator_acct_id': entry['creator_acct_id'],
+                            'forecasted_clicks': entry['forecasted_clicks'],
+                            'forecast_method': entry.get('forecast_method', 'unknown'),
+                            'conservative_click_estimate': creator.conservative_click_estimate if creator else None
+                        })
+                
+                forecast_info = {
+                    'campaign_id': campaign_id,
+                    'total_forecast_entries': len(forecast_data),
+                    'zero_forecast_count': len(zero_forecast_creators),
+                    'zero_forecast_creators': zero_forecast_creators
+                }
+            except Exception as e:
+                print(f"DEBUG: Error getting forecast: {e}")
+                forecast_info = {'error': str(e)}
+        
+        return {
+            'summary': {
+                'total_creators_checked': len(creators),
+                'creators_with_estimate': total_with_estimate,
+                'creators_without_estimate': total_without_estimate,
+                'creators_with_zero_estimate': total_zero_estimate
+            },
+            'creators': creator_data,
+            'forecast_analysis': forecast_info
+        }
+        
+    except Exception as e:
+        print(f"DEBUG: Conservative estimates check error: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error checking conservative estimates: {str(e)}")
