@@ -399,7 +399,7 @@ async def seed_creators(
                 location = (row.get('location', '') or row.get('country', '') or row.get('region', '')).strip()
                 interests = (row.get('interests', '') or row.get('interest', '') or row.get('tags', '')).strip()
                 
-                # Parse conservative click estimate with multiple header variations
+                # Parse conservative click estimate with multiple header variations (case-insensitive)
                 conservative_click_estimate = None
                 estimate_fields = [
                     'conservative_click_estimate', 'conservative click estimate', 
@@ -407,17 +407,28 @@ async def seed_creators(
                     'click_estimate', 'click estimate'
                 ]
                 
+                # Create case-insensitive lookup for row keys
+                row_lower = {k.lower(): v for k, v in row.items()}
+                
                 for field in estimate_fields:
+                    # Try exact match first
                     if field in row and row[field]:
                         field_value = str(row[field]).strip()
-                        if field_value:  # Only process if not empty after stripping
-                            try:
-                                conservative_click_estimate = int(field_value)
-                                print(f"DEBUG: Successfully parsed conservative_click_estimate from field '{field}': {conservative_click_estimate}")
-                                break
-                            except (ValueError, TypeError) as e:
-                                print(f"DEBUG: Failed to parse conservative_click_estimate from field '{field}' with value '{field_value}': {e}")
-                                continue
+                    # Try case-insensitive match
+                    elif field.lower() in row_lower and row_lower[field.lower()]:
+                        field_value = str(row_lower[field.lower()]).strip()
+                    else:
+                        continue
+                    
+                    if field_value:  # Only process if not empty after stripping
+                        try:
+                            # Handle decimal values like "8.0526705" - convert to int
+                            conservative_click_estimate = int(float(field_value))
+                            print(f"DEBUG: Successfully parsed conservative_click_estimate from field '{field}' (case-insensitive): {conservative_click_estimate}")
+                            break
+                        except (ValueError, TypeError) as e:
+                            print(f"DEBUG: Failed to parse conservative_click_estimate from field '{field}' with value '{field_value}': {e}")
+                            continue
                 
                 # Debug: Print extracted values
                 print(f"DEBUG: Extracted - owner_email: '{owner_email}', acct_id: '{acct_id}', name: '{name}', topic: '{topic}', age_range: '{age_range}', gender_skew: '{gender_skew}', location: '{location}', interests: '{interests}', conservative_click_estimate: {conservative_click_estimate}")
@@ -624,7 +635,7 @@ async def seed_creators_async(
                 location = (row.get('location', '') or row.get('country', '') or row.get('region', '')).strip()
                 interests = (row.get('interests', '') or row.get('interest', '') or row.get('tags', '')).strip()
                 
-                # Parse conservative click estimate
+                # Parse conservative click estimate (case-insensitive)
                 conservative_click_estimate = None
                 estimate_fields = [
                     'conservative_click_estimate', 'conservative click estimate', 
@@ -632,17 +643,28 @@ async def seed_creators_async(
                     'click_estimate', 'click estimate'
                 ]
                 
+                # Create case-insensitive lookup for row keys
+                row_lower = {k.lower(): v for k, v in row.items()}
+                
                 for field in estimate_fields:
+                    # Try exact match first
                     if field in row and row[field]:
                         field_value = str(row[field]).strip()
-                        if field_value:  # Only process if not empty after stripping
-                            try:
-                                conservative_click_estimate = int(field_value)
-                                print(f"DEBUG: Successfully parsed conservative_click_estimate from field '{field}': {conservative_click_estimate}")
-                                break
-                            except (ValueError, TypeError) as e:
-                                print(f"DEBUG: Failed to parse conservative_click_estimate from field '{field}' with value '{field_value}': {e}")
-                                continue
+                    # Try case-insensitive match
+                    elif field.lower() in row_lower and row_lower[field.lower()]:
+                        field_value = str(row_lower[field.lower()]).strip()
+                    else:
+                        continue
+                    
+                    if field_value:  # Only process if not empty after stripping
+                        try:
+                            # Handle decimal values like "8.0526705" - convert to int
+                            conservative_click_estimate = int(float(field_value))
+                            print(f"DEBUG: Successfully parsed conservative_click_estimate from field '{field}' (case-insensitive): {conservative_click_estimate}")
+                            break
+                        except (ValueError, TypeError) as e:
+                            print(f"DEBUG: Failed to parse conservative_click_estimate from field '{field}' with value '{field_value}': {e}")
+                            continue
                 
                 # Skip rows with missing required fields
                 if not owner_email or not acct_id:
