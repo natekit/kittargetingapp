@@ -137,8 +137,12 @@ def process_batch(db: Session, batch: List[Dict[str, Any]]) -> int:
                 if existing_creator.acct_id != creator_data['acct_id']:
                     existing_creator.acct_id = creator_data['acct_id']
                 # Update conservative click estimate if provided
+                old_estimate = existing_creator.conservative_click_estimate
                 if creator_data['conservative_click_estimate'] is not None:
                     existing_creator.conservative_click_estimate = creator_data['conservative_click_estimate']
+                    print(f"DEBUG: Updating conservative_click_estimate for creator {creator_data.get('name', 'unknown')} (acct_id: {creator_data.get('acct_id', 'unknown')}) from {old_estimate} to {creator_data['conservative_click_estimate']}")
+                else:
+                    print(f"DEBUG: Skipping conservative_click_estimate update for creator {creator_data.get('name', 'unknown')} (acct_id: {creator_data.get('acct_id', 'unknown')}) - value is None in CSV data")
                 upserted += 1
             else:
                 # Create new creator
@@ -279,8 +283,12 @@ def process_batch_optimized(db: Session, batch: List[Dict[str, Any]]) -> Dict[st
                     print(f"DEBUG: Updated acct_id from {existing_creator.acct_id} to {creator_data['acct_id']} for creator {name}")
                 
                 # Update conservative click estimate if provided
+                old_estimate = existing_creator.conservative_click_estimate
                 if creator_data['conservative_click_estimate'] is not None:
                     existing_creator.conservative_click_estimate = creator_data['conservative_click_estimate']
+                    print(f"DEBUG: Updating conservative_click_estimate for creator {name} (acct_id: {acct_id}) from {old_estimate} to {creator_data['conservative_click_estimate']}")
+                else:
+                    print(f"DEBUG: Skipping conservative_click_estimate update for creator {name} (acct_id: {acct_id}) - value is None in CSV data")
                 
                 creators_to_update.append(existing_creator)
                 upserted += 1
@@ -400,12 +408,16 @@ async def seed_creators(
                 ]
                 
                 for field in estimate_fields:
-                    if field in row and row[field].strip():
-                        try:
-                            conservative_click_estimate = int(row[field].strip())
-                            break
-                        except ValueError:
-                            continue
+                    if field in row and row[field]:
+                        field_value = str(row[field]).strip()
+                        if field_value:  # Only process if not empty after stripping
+                            try:
+                                conservative_click_estimate = int(field_value)
+                                print(f"DEBUG: Successfully parsed conservative_click_estimate from field '{field}': {conservative_click_estimate}")
+                                break
+                            except (ValueError, TypeError) as e:
+                                print(f"DEBUG: Failed to parse conservative_click_estimate from field '{field}' with value '{field_value}': {e}")
+                                continue
                 
                 # Debug: Print extracted values
                 print(f"DEBUG: Extracted - owner_email: '{owner_email}', acct_id: '{acct_id}', name: '{name}', topic: '{topic}', age_range: '{age_range}', gender_skew: '{gender_skew}', location: '{location}', interests: '{interests}', conservative_click_estimate: {conservative_click_estimate}")
@@ -621,12 +633,16 @@ async def seed_creators_async(
                 ]
                 
                 for field in estimate_fields:
-                    if field in row and row[field].strip():
-                        try:
-                            conservative_click_estimate = int(row[field].strip())
-                            break
-                        except ValueError:
-                            continue
+                    if field in row and row[field]:
+                        field_value = str(row[field]).strip()
+                        if field_value:  # Only process if not empty after stripping
+                            try:
+                                conservative_click_estimate = int(field_value)
+                                print(f"DEBUG: Successfully parsed conservative_click_estimate from field '{field}': {conservative_click_estimate}")
+                                break
+                            except (ValueError, TypeError) as e:
+                                print(f"DEBUG: Failed to parse conservative_click_estimate from field '{field}' with value '{field_value}': {e}")
+                                continue
                 
                 # Skip rows with missing required fields
                 if not owner_email or not acct_id:

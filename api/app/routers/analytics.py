@@ -2395,3 +2395,45 @@ async def debug_conservative_estimates(
         import traceback
         print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error checking conservative estimates: {str(e)}")
+
+
+@router.put("/debug/conservative-estimates/{acct_id}")
+async def update_conservative_estimate(
+    acct_id: str,
+    estimate: int = Query(..., description="The conservative click estimate value to set"),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Update the conservative_click_estimate for a creator by acct_id.
+    """
+    print(f"DEBUG: Updating conservative estimate for acct_id={acct_id} to {estimate}")
+    
+    try:
+        creator = db.query(Creator).filter(Creator.acct_id == acct_id).first()
+        
+        if not creator:
+            raise HTTPException(status_code=404, detail=f"Creator with acct_id '{acct_id}' not found")
+        
+        old_estimate = creator.conservative_click_estimate
+        creator.conservative_click_estimate = estimate
+        db.commit()
+        
+        print(f"DEBUG: Updated creator {creator.creator_id} ({creator.name}) - conservative_click_estimate: {old_estimate} -> {estimate}")
+        
+        return {
+            'success': True,
+            'creator_id': creator.creator_id,
+            'name': creator.name,
+            'acct_id': creator.acct_id,
+            'old_estimate': old_estimate,
+            'new_estimate': estimate
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"DEBUG: Update conservative estimate error: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error updating conservative estimate: {str(e)}")
