@@ -23,11 +23,18 @@ def get_openai_client():
         return None
     
     try:
-        openai_client = OpenAI(api_key=openai_api_key)
+        # Initialize OpenAI client with explicit parameters to avoid proxy issues
+        openai_client = OpenAI(
+            api_key=openai_api_key,
+            # Explicitly disable proxies if not needed
+            http_client=None  # Let OpenAI use default http client
+        )
         print("DEBUG: OpenAI client initialized successfully")
         return openai_client
     except Exception as e:
         print(f"DEBUG: Failed to initialize OpenAI client: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
         return None
 
 
