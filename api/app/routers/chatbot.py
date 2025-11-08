@@ -9,10 +9,26 @@ from app.config import settings
 
 router = APIRouter()
 
-# Initialize OpenAI client
+# Initialize OpenAI client lazily (only when needed and key is available)
 openai_client = None
-if os.getenv("OPENAI_API_KEY"):
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def get_openai_client():
+    """Get or create OpenAI client. Returns None if API key is not configured."""
+    global openai_client
+    if openai_client is not None:
+        return openai_client
+    
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        return None
+    
+    try:
+        openai_client = OpenAI(api_key=openai_api_key)
+        print("DEBUG: OpenAI client initialized successfully")
+        return openai_client
+    except Exception as e:
+        print(f"DEBUG: Failed to initialize OpenAI client: {e}")
+        return None
 
 
 class ChatMessage(BaseModel):
@@ -113,7 +129,8 @@ async def chat(
     db: Session = Depends(get_db)
 ):
     """Handle chatbot conversation with OpenAI."""
-    if not openai_client:
+    client = get_openai_client()
+    if not client:
         raise HTTPException(
             status_code=500,
             detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
@@ -124,7 +141,7 @@ async def chat(
         openai_messages = build_messages_for_openai(request.messages, request.collected_data)
         
         # Call OpenAI API
-        response = openai_client.chat.completions.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",  # Using mini for cost efficiency, can upgrade to gpt-4 if needed
             messages=openai_messages,
             temperature=0.7,
