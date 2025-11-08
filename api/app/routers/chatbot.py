@@ -215,10 +215,10 @@ async def chat(
         updated_collected_data = request.collected_data.copy() if request.collected_data else {}
         
         tool_calls_present = response.choices[0].message.tool_calls is not None and len(response.choices[0].message.tool_calls) > 0
+        tool_messages = []  # Initialize tool messages list
         
         if tool_calls_present:
             # Build tool response messages for each tool call
-            tool_messages = []
             for tool_call in response.choices[0].message.tool_calls:
                 if tool_call.function.name == "extract_campaign_data":
                     import json
