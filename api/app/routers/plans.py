@@ -140,10 +140,13 @@ async def confirm_plan(
                     print(f"DEBUG: SMTP credentials not configured - would send to nate@kit.com")
                     print(f"DEBUG: Set SMTP_USERNAME and SMTP_PASSWORD environment variables")
                 else:
+                    # Recipient email (hardcoded)
+                    recipient_email = 'nate@kit.com'
+                    
                     # Create email
                     msg = MIMEMultipart()
                     msg['From'] = smtp_username
-                    msg['To'] = 'nate@kit.com'
+                    msg['To'] = recipient_email
                     msg['Subject'] = f"New Campaign Confirmed - {current_user.email}"
                     
                     # Email body
@@ -195,7 +198,7 @@ Kit Targeting System
                     server.login(smtp_username, smtp_password)
                     server.send_message(msg)
                     server.quit()
-                    print(f"DEBUG: Confirmation email sent successfully to {recipient_email}")
+                    print(f"DEBUG: Confirmation email sent successfully to nate@kit.com")
                     print(f"DEBUG: Email subject: {msg['Subject']}")
                     print(f"DEBUG: CSV attachment size: {len(csv_content)} characters")
         except Exception as e:
