@@ -78,9 +78,11 @@ HOW TO COLLECT DATA:
 - If the user asks about the platform or how it works, explain briefly
 
 WHEN ALL REQUIRED DATA IS COLLECTED:
-- Set ready_for_plan to true
+- Use the extract_campaign_data function to save all collected data
 - Summarize what you've collected
-- Tell the user their campaign plan is ready and ask if they'd like to proceed
+- Tell the user their campaign plan is ready and they can proceed to generate it
+
+IMPORTANT: Always use the extract_campaign_data function whenever the user provides campaign information. Extract and save data incrementally as the conversation progresses.
 
 PLATFORM CONTEXT:
 - Kit Targeting matches advertisers with content creators based on performance data, demographics, and similarity
@@ -143,27 +145,95 @@ async def chat(
         # Build messages for OpenAI
         openai_messages = build_messages_for_openai(request.messages, request.collected_data)
         
-        # Call OpenAI API
+        # Define function for extracting campaign data
+        extract_data_function = {
+            "type": "function",
+            "function": {
+                "name": "extract_campaign_data",
+                "description": "Extract structured campaign data from the conversation",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "budget": {"type": "number", "description": "Campaign budget in dollars"},
+                        "category": {"type": "string", "description": "Advertiser category (e.g., Tech, News, Finance)"},
+                        "advertiser_id": {"type": "integer", "description": "Advertiser ID if known"},
+                        "cpc": {"type": "number", "description": "Cost per click in dollars"},
+                        "target_cpa": {"type": "number", "description": "Target cost per acquisition"},
+                        "advertiser_avg_cvr": {"type": "number", "description": "Average conversion rate as decimal (e.g., 0.20 for 20%)"},
+                        "horizon_days": {"type": "integer", "description": "Campaign duration in days"},
+                        "target_age_range": {"type": "string", "description": "Target age range (e.g., 25-54)"},
+                        "target_gender_skew": {"type": "string", "description": "Target gender skew (e.g., mostly female, mostly male, even split)"},
+                        "target_location": {"type": "string", "description": "Target location (e.g., US, UK)"},
+                        "target_interests": {"type": "string", "description": "Target interests (comma-separated)"}
+                    }
+                }
+            }
+        }
+        
+        # Call OpenAI API with function calling
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Using mini for cost efficiency, can upgrade to gpt-4 if needed
+            model="gpt-4o-mini",
             messages=openai_messages,
             temperature=0.7,
-            max_tokens=500
+            max_tokens=500,
+            tools=[{"type": "function", "function": extract_data_function["function"]}],
+            tool_choice="auto"
         )
         
-        assistant_message = response.choices[0].message.content
+        # Get assistant message (may be None if only tool calls)
+        assistant_message = response.choices[0].message.content or ""
+        
+        # Extract structured data from function call if present
+        updated_collected_data = request.collected_data.copy() if request.collected_data else {}
+        
+        if response.choices[0].message.tool_calls:
+            for tool_call in response.choices[0].message.tool_calls:
+                if tool_call.function.name == "extract_campaign_data":
+                    import json
+                    try:
+                        extracted_data = json.loads(tool_call.function.arguments)
+                        # Merge extracted data with existing collected data
+                        for key, value in extracted_data.items():
+                            if value is not None:  # Only update if value is not None
+                                updated_collected_data[key] = value
+                        print(f"DEBUG: Extracted campaign data: {extracted_data}")
+                    except json.JSONDecodeError as e:
+                        print(f"DEBUG: Error parsing extracted data: {e}")
+        
+        # If assistant message is empty but we have tool calls, generate a follow-up message
+        if not assistant_message and response.choices[0].message.tool_calls:
+            # Make a follow-up call to get the assistant's response
+            follow_up_messages = openai_messages + [
+                {"role": "assistant", "content": None, "tool_calls": [
+                    {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in response.choices[0].message.tool_calls
+                ]},
+                {"role": "tool", "content": "Data extracted successfully", "tool_call_id": response.choices[0].message.tool_calls[0].id}
+            ]
+            
+            follow_up_response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=follow_up_messages,
+                temperature=0.7,
+                max_tokens=500
+            )
+            assistant_message = follow_up_response.choices[0].message.content or assistant_message
         
         # Check if ready for plan generation
-        ready_for_plan = check_if_ready_for_plan(request.collected_data)
+        ready_for_plan = check_if_ready_for_plan(updated_collected_data)
+        
+        print(f"DEBUG: Ready for plan: {ready_for_plan}, Collected data keys: {list(updated_collected_data.keys())}")
         
         return ChatResponse(
             message=assistant_message,
-            collected_data=request.collected_data,
+            collected_data=updated_collected_data,
             ready_for_plan=ready_for_plan
         )
         
     except Exception as e:
         print(f"DEBUG: OpenAI API error: {e}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail=f"Error communicating with AI: {str(e)}"
