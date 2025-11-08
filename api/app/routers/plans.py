@@ -189,13 +189,13 @@ Kit Targeting System
                     msg.attach(attachment)
                     
                     # Send email
-                    print(f"DEBUG: Sending confirmation email to nate@kit.com")
+                    print(f"DEBUG: Sending confirmation email to {recipient_email}")
                     server = smtplib.SMTP(smtp_server, smtp_port)
                     server.starttls()
                     server.login(smtp_username, smtp_password)
                     server.send_message(msg)
                     server.quit()
-                    print(f"DEBUG: Confirmation email sent successfully to nate@kit.com")
+                    print(f"DEBUG: Confirmation email sent successfully to {recipient_email}")
                     print(f"DEBUG: Email subject: {msg['Subject']}")
                     print(f"DEBUG: CSV attachment size: {len(csv_content)} characters")
         except Exception as e:
