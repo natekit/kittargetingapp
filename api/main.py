@@ -7,13 +7,13 @@ from app.routers import core, seed, uploads, analytics, declined_creators, auth,
 app = FastAPI(title="Kit Targeting App API", version="1.0.0")
 
 # Configure CORS
-# Use regex pattern in production to allow all origins (for public API)
-# This handles Vercel screenshot service and other legitimate services
+# In production, use regex to allow Vercel domains and other HTTPS origins
+# In development, use explicit origins from settings
 if settings.APP_ENV == "production":
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"https?://.*",  # Allow all HTTP/HTTPS origins
-        allow_credentials=False,  # Cannot use credentials with regex origins
+        allow_origin_regex=r"https://.*\.vercel\.app|https://kittargetingapp\.vercel\.app",  # Allow Vercel domains
+        allow_credentials=True,  # Allow credentials for JWT tokens
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["*"],
