@@ -13,7 +13,8 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'add_users_and_plans'
-down_revision: Union[str, Sequence[str], None] = 'merge_branches_001'
+# Depend on common ancestor to work regardless of which branches exist
+down_revision: Union[str, Sequence[str], None] = '2a7359f2c90f'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
