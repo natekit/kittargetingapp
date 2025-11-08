@@ -76,13 +76,30 @@ HOW TO COLLECT DATA:
 - If the user provides information, acknowledge it and move to the next question
 - Be friendly and helpful
 - If the user asks about the platform or how it works, explain briefly
+- Collect data in this order:
+  1. Budget (required)
+  2. Category or advertiser info (required)
+  3. CPC (required)
+  4. Target CPA (optional)
+  5. Average CVR (optional)
+  6. Campaign duration/horizon days (optional)
+  7. Demographics: age range, gender skew, location, interests (all optional but should be discussed)
 
-WHEN ALL REQUIRED DATA IS COLLECTED:
-- Use the extract_campaign_data function to save all collected data
-- Summarize what you've collected
-- Tell the user their campaign plan is ready and they can proceed to generate it
+DATA COLLECTION PROCESS:
+- Use the extract_campaign_data function whenever the user provides campaign information
+- Extract and save data incrementally as the conversation progresses
+- After collecting demographics (age, gender, location, interests), ask if they want to add anything else
 
-IMPORTANT: Always use the extract_campaign_data function whenever the user provides campaign information. Extract and save data incrementally as the conversation progresses.
+WHEN ALL DATA IS COLLECTED (including demographics):
+- Summarize everything you've collected
+- Ask the user: "Your campaign plan is ready! Would you like me to generate your campaign plan now?"
+- DO NOT set ready_for_plan to true until the user explicitly confirms (says "yes", "proceed", "generate", "let's do it", etc.)
+- Only after the user explicitly confirms should you indicate the plan is ready
+
+IMPORTANT: 
+- Always use the extract_campaign_data function to save data as it's provided
+- Wait for explicit user confirmation before indicating the plan is ready
+- Don't rush - make sure all optional demographics are discussed before asking for confirmation
 
 PLATFORM CONTEXT:
 - Kit Targeting matches advertisers with content creators based on performance data, demographics, and similarity
@@ -117,15 +134,26 @@ def build_messages_for_openai(messages: List[ChatMessage], collected_data: Optio
     return openai_messages
 
 
-def check_if_ready_for_plan(collected_data: Optional[Dict[str, Any]]) -> bool:
-    """Check if all required data is collected."""
+def check_if_ready_for_plan(collected_data: Optional[Dict[str, Any]], last_user_message: Optional[str] = None) -> bool:
+    """Check if all required data is collected AND user has explicitly confirmed."""
     if not collected_data:
         return False
     
+    # Check required fields
     required_fields = ['budget', 'cpc']
     has_category_or_advertiser = 'category' in collected_data or 'advertiser_id' in collected_data
     
-    return all(field in collected_data for field in required_fields) and has_category_or_advertiser
+    if not (all(field in collected_data for field in required_fields) and has_category_or_advertiser):
+        return False
+    
+    # Check if user has explicitly confirmed
+    if last_user_message:
+        confirmation_keywords = ['yes', 'proceed', 'generate', 'let\'s do it', 'go ahead', 'sure', 'ok', 'okay', 'confirm', 'ready', 'create', 'build']
+        last_message_lower = last_user_message.lower()
+        if any(keyword in last_message_lower for keyword in confirmation_keywords):
+            return True
+    
+    return False
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -219,10 +247,20 @@ async def chat(
             )
             assistant_message = follow_up_response.choices[0].message.content or assistant_message
         
-        # Check if ready for plan generation
-        ready_for_plan = check_if_ready_for_plan(updated_collected_data)
+        # Get the last user message to check for confirmation
+        last_user_message = None
+        if request.messages:
+            # Find the last user message
+            for msg in reversed(request.messages):
+                if msg.role == 'user':
+                    last_user_message = msg.content
+                    break
+        
+        # Check if ready for plan generation (requires data + explicit confirmation)
+        ready_for_plan = check_if_ready_for_plan(updated_collected_data, last_user_message)
         
         print(f"DEBUG: Ready for plan: {ready_for_plan}, Collected data keys: {list(updated_collected_data.keys())}")
+        print(f"DEBUG: Last user message: {last_user_message}")
         
         return ChatResponse(
             message=assistant_message,
