@@ -12,7 +12,7 @@ app = FastAPI(title="Kit Targeting App API", version="1.0.0")
 if settings.APP_ENV == "production":
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"https://.*\.vercel\.app|https://kittargetingapp\.vercel\.app",  # Allow Vercel domains
+        allow_origin_regex=r"https://.*\.vercel\.app",  # Allow all Vercel domains (including preview deployments)
         allow_credentials=True,  # Allow credentials for JWT tokens
         allow_methods=["*"],
         allow_headers=["*"],
