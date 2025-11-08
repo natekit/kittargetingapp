@@ -5,7 +5,6 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { api } from '../../api';
 import toast from 'react-hot-toast';
-import type { PlanResponse } from '../../types';
 
 export function CampaignBuilderPage() {
   const { user, signOut } = useAuth();
