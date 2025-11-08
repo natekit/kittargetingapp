@@ -21,6 +21,7 @@ def upgrade() -> None:
     """Merge branches - no schema changes needed."""
     # This is a merge migration, so no actual schema changes
     # Both branches are already applied, we're just merging the history
+    # If branches don't exist, Alembic will handle it during migration resolution
     pass
 
 
