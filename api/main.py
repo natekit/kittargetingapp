@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routers import core, seed, uploads, analytics, declined_creators
+from app.routers import core, seed, uploads, analytics, declined_creators, auth, chatbot, plans
 
 app = FastAPI(title="Kit Targeting App API", version="1.0.0")
 
@@ -29,6 +29,9 @@ else:
     )
 
 # Mount routers
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(chatbot.router, prefix="/api/chatbot", tags=["chatbot"])
+app.include_router(plans.router, prefix="/api", tags=["plans"])
 app.include_router(core.router, prefix="/api", tags=["core"])
 app.include_router(seed.router, prefix="/api", tags=["seed"])
 app.include_router(uploads.router, prefix="/api", tags=["uploads"])

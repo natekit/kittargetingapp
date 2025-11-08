@@ -1,6 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { CustomerRouteGuard } from './components/CustomerRouteGuard';
 import { Layout } from './components/Layout';
 import { AdminPage } from './pages/admin/AdminPage';
 import { CreatorManagement } from './pages/admin/CreatorManagement';
@@ -10,51 +13,69 @@ import { LeaderboardPage } from './pages/dashboard/LeaderboardPage';
 import { PlannerPage } from './pages/planner/PlannerPage';
 import { HistoricalDataPage } from './pages/analytics/HistoricalDataPage';
 import { CampaignForecastPage } from './pages/analytics/CampaignForecastPage';
+import { SignUpPage } from './pages/auth/SignUpPage';
+import { SignInPage } from './pages/auth/SignInPage';
+import { CampaignBuilderPage } from './pages/campaign-builder/CampaignBuilderPage';
 
 const queryClient = new QueryClient();
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
-        <Layout>
+      <AuthProvider>
+        <Router>
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard/leaderboard" replace />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/admin/creators" element={<CreatorManagement />} />
-            <Route path="/uploads/performance" element={<PerformanceUpload />} />
-            <Route path="/uploads/conversions" element={<ConversionsUpload />} />
-            <Route path="/dashboard/leaderboard" element={<LeaderboardPage />} />
-            <Route path="/planner" element={<PlannerPage />} />
-            <Route path="/analytics/historical" element={<HistoricalDataPage />} />
-            <Route path="/analytics/forecast" element={<CampaignForecastPage />} />
+            {/* Public auth routes */}
+            <Route path="/signup" element={<SignUpPage />} />
+            <Route path="/signin" element={<SignInPage />} />
+            
+            {/* Protected customer-facing route (chatbot) */}
+            <Route 
+              path="/campaign-builder" 
+              element={
+                <ProtectedRoute>
+                  <CampaignBuilderPage />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Internal app routes (blocked for customer users) */}
+            <Route path="/" element={<CustomerRouteGuard><Layout><Navigate to="/dashboard/leaderboard" replace /></Layout></CustomerRouteGuard>} />
+            <Route path="/admin" element={<CustomerRouteGuard><Layout><AdminPage /></Layout></CustomerRouteGuard>} />
+            <Route path="/admin/creators" element={<CustomerRouteGuard><Layout><CreatorManagement /></Layout></CustomerRouteGuard>} />
+            <Route path="/uploads/performance" element={<CustomerRouteGuard><Layout><PerformanceUpload /></Layout></CustomerRouteGuard>} />
+            <Route path="/uploads/conversions" element={<CustomerRouteGuard><Layout><ConversionsUpload /></Layout></CustomerRouteGuard>} />
+            <Route path="/dashboard/leaderboard" element={<CustomerRouteGuard><Layout><LeaderboardPage /></Layout></CustomerRouteGuard>} />
+            <Route path="/planner" element={<CustomerRouteGuard><Layout><PlannerPage /></Layout></CustomerRouteGuard>} />
+            <Route path="/analytics/historical" element={<CustomerRouteGuard><Layout><HistoricalDataPage /></Layout></CustomerRouteGuard>} />
+            <Route path="/analytics/forecast" element={<CustomerRouteGuard><Layout><CampaignForecastPage /></Layout></CustomerRouteGuard>} />
           </Routes>
-        </Layout>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: '#363636',
-              color: '#fff',
-            },
-            success: {
-              duration: 3000,
-              iconTheme: {
-                primary: '#10B981',
-                secondary: '#fff',
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#363636',
+                color: '#fff',
               },
-            },
-            error: {
-              duration: 5000,
-              iconTheme: {
-                primary: '#EF4444',
-                secondary: '#fff',
+              success: {
+                duration: 3000,
+                iconTheme: {
+                  primary: '#10B981',
+                  secondary: '#fff',
+                },
               },
-            },
-          }}
-        />
-      </Router>
+              error: {
+                duration: 5000,
+                iconTheme: {
+                  primary: '#EF4444',
+                  secondary: '#fff',
+                },
+              },
+            }}
+          />
+        </Router>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

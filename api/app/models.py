@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean, Text, ForeignKey, TIMESTAMP, ARRAY
-from sqlalchemy.dialects.postgresql import CITEXT, DATERANGE
+from sqlalchemy.dialects.postgresql import CITEXT, DATERANGE, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.schema import CheckConstraint
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
@@ -274,5 +274,40 @@ class CreatorVector(Base):
     # Constraints
     __table_args__ = (
         CheckConstraint("vector_dimension > 0", name="check_vector_dimension_positive"),
+    )
+
+
+class User(Base):
+    __tablename__ = "users"
+    
+    user_id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    
+    # Relationships
+    plans = relationship("Plan", back_populates="user")
+
+
+class Plan(Base):
+    __tablename__ = "plans"
+    
+    plan_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, index=True)
+    plan_data = Column(JSONB, nullable=False)  # Full PlanResponse as JSON
+    plan_request = Column(JSONB, nullable=False)  # Full PlanRequest as JSON
+    status = Column(String(20), nullable=False, server_default="draft", index=True)  # 'draft', 'confirmed', 'cancelled'
+    confirmed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default="now()")
+    
+    # Relationships
+    user = relationship("User", back_populates="plans")
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'confirmed', 'cancelled')", name="check_plan_status"),
     )
 

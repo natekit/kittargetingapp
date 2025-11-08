@@ -1,4 +1,11 @@
 // API Response Types
+export interface User {
+  user_id: number;
+  email: string;
+  name?: string;
+  created_at: string;
+}
+
 export interface Advertiser {
   advertiser_id: number;
   name: string;

@@ -1,4 +1,5 @@
 import type { 
+  User,
   Advertiser, 
   Campaign, 
   Insertion, 
@@ -22,24 +23,43 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
+  private getAuthToken(): string | null {
+    return localStorage.getItem('auth_token');
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {}),
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const config: RequestInit = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
       ...options,
     };
 
     const response = await fetch(url, config);
     
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      let errorMessage = `API Error: ${response.status} ${response.statusText}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.detail || errorMessage;
+      } catch {
+        // Use default error message
+      }
+      throw new Error(errorMessage);
     }
 
     return response.json();
@@ -257,6 +277,53 @@ class ApiClient {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  // Auth
+  async signUp(email: string, password: string, name?: string): Promise<{ access_token: string; user: User }> {
+    return this.request<{ access_token: string; user: User }>('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, name }),
+    });
+  }
+
+  async signIn(email: string, password: string): Promise<{ access_token: string; user: User }> {
+    return this.request<{ access_token: string; user: User }>('/api/auth/signin', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
+  async getCurrentUser(): Promise<User> {
+    return this.request<User>('/api/auth/me');
+  }
+
+  // Chatbot
+  async sendChatMessage(
+    messages: Array<{ role: string; content: string }>,
+    collectedData?: Record<string, any>
+  ): Promise<{ message: string; collected_data?: Record<string, any>; ready_for_plan: boolean }> {
+    return this.request<{ message: string; collected_data?: Record<string, any>; ready_for_plan: boolean }>('/api/chatbot/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages, collected_data: collectedData }),
+    });
+  }
+
+  // Plans
+  async savePlan(planRequest: Record<string, any>, planResponse: PlanResponse): Promise<{ plan_id: number; status: string; created_at: string }> {
+    return this.request<{ plan_id: number; status: string; created_at: string }>('/api/plans', {
+      method: 'POST',
+      body: JSON.stringify({
+        plan_request: planRequest,
+        plan_response: planResponse,
+      }),
+    });
+  }
+
+  async confirmPlan(planId: number): Promise<{ success: boolean; message: string; plan_id: number }> {
+    return this.request<{ success: boolean; message: string; plan_id: number }>(`/api/plans/${planId}/confirm`, {
+      method: 'PUT',
+    });
   }
 }
 

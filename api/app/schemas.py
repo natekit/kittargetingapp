@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
 from datetime import date
 from decimal import Decimal
@@ -76,8 +76,20 @@ class PlanRequest(BaseModel):
     insertion_id: Optional[int] = None
     cpc: Optional[float] = None
     budget: float
-    max_creators: int = 50
     target_cpa: Optional[float] = None
+    advertiser_avg_cvr: Optional[float] = None
+    horizon_days: int = 30
+    # Smart matching fields
+    target_age_range: Optional[str] = None
+    target_gender_skew: Optional[str] = None
+    target_location: Optional[str] = None
+    target_interests: Optional[str] = None
+    use_smart_matching: bool = True
+    # Creator filtering fields
+    include_acct_ids: Optional[str] = None
+    exclude_acct_ids: Optional[str] = None
+    # Email export field
+    email: Optional[str] = None
 
 
 class PlanCreator(BaseModel):
@@ -150,3 +162,31 @@ class CampaignForecastResponse(BaseModel):
     forecasted_conversions: float
     forecasted_cpa: Optional[float]
     confidence_score: float
+
+
+# Auth schemas
+class UserSignUp(BaseModel):
+    email: EmailStr
+    password: str
+    name: Optional[str] = None
+
+
+class UserSignIn(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserOut(BaseModel):
+    user_id: int
+    email: str
+    name: Optional[str] = None
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
