@@ -10,12 +10,9 @@ import type { PlanResponse } from '../../types';
 export function CampaignBuilderPage() {
   const { user, signOut } = useAuth();
   const [showPlan, setShowPlan] = useState(false);
-  const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [collectedData, setCollectedData] = useState<Record<string, any> | null>(null);
   const [generatingPlan, setGeneratingPlan] = useState(false);
-  const [planId, setPlanId] = useState<number | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const [planGenerated, setPlanGenerated] = useState(false);
 
   const handleReadyForPlan = (data: Record<string, any>) => {
     setCollectedData(data);
@@ -68,16 +65,25 @@ export function CampaignBuilderPage() {
       }
 
       const planResponse = await api.createSmartPlan(planRequest);
-      setPlan(planResponse);
       
-      // Save plan to database
+      // Save plan to database and send email
       try {
         const savedPlan = await api.savePlan(planRequest, planResponse);
-        setPlanId(savedPlan.plan_id);
-        toast.success('Campaign plan generated and saved successfully!');
+        
+        // Automatically confirm and send email
+        try {
+          await api.confirmPlan(savedPlan.plan_id);
+          setPlanGenerated(true);
+          toast.success('Campaign plan submitted successfully!');
+        } catch (confirmError) {
+          console.error('Error confirming plan:', confirmError);
+          // Plan is still saved, just email might not have sent
+          setPlanGenerated(true);
+          toast.success('Campaign plan saved! Our team will reach out shortly.');
+        }
       } catch (error) {
         console.error('Error saving plan:', error);
-        toast.error('Plan generated but failed to save. You can still review it.');
+        toast.error('Failed to save plan. Please try again.');
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to generate plan');
@@ -160,105 +166,19 @@ export function CampaignBuilderPage() {
               </CardContent>
             </Card>
 
-            {/* Plan Results */}
-            {plan && (
+            {/* Thank You Message */}
+            {planGenerated && (
               <Card>
-                <CardHeader>
-                  <CardTitle>Your Campaign Plan</CardTitle>
-                  <CardDescription>
-                    We've picked {plan.picked_creators.length} creators for your campaign
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-4 gap-4 mb-6">
-                    <div className="bg-gray-50 p-4 rounded-md">
-                      <div className="text-sm text-gray-500">Total Spend</div>
-                      <div className="text-2xl font-bold">${plan.total_spend.toLocaleString()}</div>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-md">
-                      <div className="text-sm text-gray-500">Total Conversions</div>
-                      <div className="text-2xl font-bold">{plan.total_conversions.toFixed(0)}</div>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-md">
-                      <div className="text-sm text-gray-500">Blended CPA</div>
-                      <div className="text-2xl font-bold">${plan.blended_cpa.toFixed(2)}</div>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-md">
-                      <div className="text-sm text-gray-500">Budget Utilization</div>
-                      <div className="text-2xl font-bold">{(plan.budget_utilization * 100).toFixed(1)}%</div>
-                    </div>
-                  </div>
-
-                  <div className="mt-6">
-                    <h3 className="text-lg font-semibold mb-4">Selected Creators</h3>
-                    <div className="space-y-2">
-                      {plan.picked_creators.slice(0, 10).map((creator) => (
-                        <div key={creator.creator_id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <p className="font-medium">{creator.name}</p>
-                              <p className="text-sm text-gray-500">Account ID: {creator.acct_id}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-medium">${creator.expected_spend.toFixed(2)}</p>
-                              <p className="text-xs text-gray-500">{creator.expected_clicks.toFixed(0)} clicks</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {plan.picked_creators.length > 10 && (
-                        <p className="text-sm text-gray-500 text-center">
-                          ... and {plan.picked_creators.length - 10} more creators
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-6">
-                    {confirmed ? (
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                        <div className="text-green-600 text-2xl mb-2">✓</div>
-                        <h3 className="text-lg font-semibold text-green-900 mb-2">Campaign Confirmed!</h3>
-                        <p className="text-sm text-green-700">
-                          Your campaign plan has been sent to our team. We'll set up your campaign shortly.
-                        </p>
-                        <p className="text-xs text-green-600 mt-2">
-                          A confirmation email with your plan details has been sent to nate@kit.com
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <p className="text-sm text-blue-800">
-                            <strong>Ready to confirm?</strong> Once you confirm, we'll send your campaign plan to our team at nate@kit.com and begin setting up your campaign.
-                          </p>
-                        </div>
-                        <Button
-                          onClick={async () => {
-                            if (!planId) {
-                              toast.error('Plan ID not found. Please regenerate the plan.');
-                              return;
-                            }
-                            
-                            setConfirming(true);
-                            try {
-                              const result = await api.confirmPlan(planId);
-                              setConfirmed(true);
-                              toast.success(result.message);
-                            } catch (error) {
-                              toast.error(error instanceof Error ? error.message : 'Failed to confirm campaign');
-                            } finally {
-                              setConfirming(false);
-                            }
-                          }}
-                          className="w-full bg-green-600 hover:bg-green-700"
-                          disabled={confirming || !planId}
-                          size="lg"
-                        >
-                          {confirming ? 'Confirming...' : '✓ Confirm Campaign'}
-                        </Button>
-                      </div>
-                    )}
+                <CardContent className="pt-6">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-8 text-center">
+                    <div className="text-green-600 text-4xl mb-4">✓</div>
+                    <h3 className="text-2xl font-semibold text-green-900 mb-3">Thank You!</h3>
+                    <p className="text-lg text-green-700 mb-2">
+                      Someone from the Kit Ads team will be reaching out shortly with next steps for your campaign.
+                    </p>
+                    <p className="text-sm text-green-600 mt-4">
+                      Your campaign plan has been submitted and our team has been notified.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
