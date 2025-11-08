@@ -195,11 +195,16 @@ Kit Targeting System
                     server.login(smtp_username, smtp_password)
                     server.send_message(msg)
                     server.quit()
-                    print(f"DEBUG: Confirmation email sent successfully")
+                    print(f"DEBUG: Confirmation email sent successfully to nate@kit.com")
+                    print(f"DEBUG: Email subject: {msg['Subject']}")
+                    print(f"DEBUG: CSV attachment size: {len(csv_content)} characters")
         except Exception as e:
             print(f"DEBUG: Error sending confirmation email: {e}")
+            import traceback
+            print(f"DEBUG: Email error traceback: {traceback.format_exc()}")
             # Don't fail the confirmation if email fails
             # The plan is still confirmed in the database
+            # But log the error so we know email didn't send
         
         return PlanConfirmResponse(
             success=True,

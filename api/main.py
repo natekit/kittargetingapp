@@ -3,8 +3,15 @@ from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import core, seed, uploads, analytics, declined_creators, auth, chatbot, plans
+import os
 
 app = FastAPI(title="Kit Targeting App API", version="1.0.0")
+
+# Check OpenAI API key on startup
+if not os.getenv("OPENAI_API_KEY"):
+    print("WARNING: OPENAI_API_KEY not set. Chatbot functionality will not work.")
+else:
+    print("INFO: OpenAI API key configured. Chatbot is ready.")
 
 # Configure CORS
 # In production, use regex to allow Vercel domains and other HTTPS origins

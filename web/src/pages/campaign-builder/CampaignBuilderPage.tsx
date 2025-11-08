@@ -15,6 +15,7 @@ export function CampaignBuilderPage() {
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [planId, setPlanId] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
 
   const handleReadyForPlan = (data: Record<string, any>) => {
     setCollectedData(data);
@@ -214,29 +215,50 @@ export function CampaignBuilderPage() {
                   </div>
 
                   <div className="mt-6">
-                    <Button
-                      onClick={async () => {
-                        if (!planId) {
-                          toast.error('Plan ID not found. Please regenerate the plan.');
-                          return;
-                        }
-                        
-                        setConfirming(true);
-                        try {
-                          const result = await api.confirmPlan(planId);
-                          toast.success(result.message);
-                          // Optionally redirect or show success state
-                        } catch (error) {
-                          toast.error(error instanceof Error ? error.message : 'Failed to confirm campaign');
-                        } finally {
-                          setConfirming(false);
-                        }
-                      }}
-                      className="w-full"
-                      disabled={confirming || !planId}
-                    >
-                      {confirming ? 'Confirming...' : 'Confirm Campaign'}
-                    </Button>
+                    {confirmed ? (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                        <div className="text-green-600 text-2xl mb-2">✓</div>
+                        <h3 className="text-lg font-semibold text-green-900 mb-2">Campaign Confirmed!</h3>
+                        <p className="text-sm text-green-700">
+                          Your campaign plan has been sent to our team. We'll set up your campaign shortly.
+                        </p>
+                        <p className="text-xs text-green-600 mt-2">
+                          A confirmation email with your plan details has been sent to nate@kit.com
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <p className="text-sm text-blue-800">
+                            <strong>Ready to confirm?</strong> Once you confirm, we'll send your campaign plan to our team at nate@kit.com and begin setting up your campaign.
+                          </p>
+                        </div>
+                        <Button
+                          onClick={async () => {
+                            if (!planId) {
+                              toast.error('Plan ID not found. Please regenerate the plan.');
+                              return;
+                            }
+                            
+                            setConfirming(true);
+                            try {
+                              const result = await api.confirmPlan(planId);
+                              setConfirmed(true);
+                              toast.success(result.message);
+                            } catch (error) {
+                              toast.error(error instanceof Error ? error.message : 'Failed to confirm campaign');
+                            } finally {
+                              setConfirming(false);
+                            }
+                          }}
+                          className="w-full bg-green-600 hover:bg-green-700"
+                          disabled={confirming || !planId}
+                          size="lg"
+                        >
+                          {confirming ? 'Confirming...' : '✓ Confirm Campaign'}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
