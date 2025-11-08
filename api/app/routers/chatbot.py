@@ -214,7 +214,11 @@ async def chat(
         # Extract structured data from function call if present
         updated_collected_data = request.collected_data.copy() if request.collected_data else {}
         
-        if response.choices[0].message.tool_calls:
+        tool_calls_present = response.choices[0].message.tool_calls is not None and len(response.choices[0].message.tool_calls) > 0
+        
+        if tool_calls_present:
+            # Build tool response messages for each tool call
+            tool_messages = []
             for tool_call in response.choices[0].message.tool_calls:
                 if tool_call.function.name == "extract_campaign_data":
                     import json
@@ -225,19 +229,42 @@ async def chat(
                             if value is not None:  # Only update if value is not None
                                 updated_collected_data[key] = value
                         print(f"DEBUG: Extracted campaign data: {extracted_data}")
+                        
+                        # Add tool response message
+                        tool_messages.append({
+                            "role": "tool",
+                            "content": json.dumps({"status": "success", "extracted": extracted_data}),
+                            "tool_call_id": tool_call.id
+                        })
                     except json.JSONDecodeError as e:
                         print(f"DEBUG: Error parsing extracted data: {e}")
+                        tool_messages.append({
+                            "role": "tool",
+                            "content": json.dumps({"status": "error", "message": str(e)}),
+                            "tool_call_id": tool_call.id
+                        })
         
         # If assistant message is empty but we have tool calls, generate a follow-up message
-        if not assistant_message and response.choices[0].message.tool_calls:
+        if not assistant_message and tool_calls_present:
             # Make a follow-up call to get the assistant's response
+            # Include the assistant message with tool calls and tool responses
             follow_up_messages = openai_messages + [
-                {"role": "assistant", "content": None, "tool_calls": [
-                    {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                    for tc in response.choices[0].message.tool_calls
-                ]},
-                {"role": "tool", "content": "Data extracted successfully", "tool_call_id": response.choices[0].message.tool_calls[0].id}
-            ]
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments
+                            }
+                        }
+                        for tc in response.choices[0].message.tool_calls
+                    ]
+                }
+            ] + tool_messages
             
             follow_up_response = client.chat.completions.create(
                 model="gpt-4o-mini",
